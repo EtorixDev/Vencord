@@ -595,8 +595,8 @@ export const Devs = /* #__PURE__*/ Object.freeze({
     },
     Etorix: {
         name: "Etorix",
-        id: 94597845868355584n
-    }
+        id: 94597845868355584n,
+    },
 } satisfies Record<string, Dev>);
 
 // iife so #__PURE__ works correctly
