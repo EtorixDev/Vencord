@@ -12,7 +12,7 @@ import { Button, ContextMenuApi, Forms, Menu, Select, TextArea, TextInput, useEf
 import { JSX } from "react";
 
 import { getQuestTileClasses } from "./index";
-import { ColorPicker, DisableQuestsSettingOption, DisableQuestsSettingProps, DynamicDropdown, FetchingQuestsSettingProps, GuildlessServerListItem, Quest, QuestButtonSettingProps, QuestIcon, QuestTile, RadioGroup, RadioOption, RestyleQuestsSettingProps, SelectOption, SoundIcon } from "./utils/components";
+import { ColorPicker, DisableQuestsSettingOption, DynamicDropdown, GuildlessServerListItem, Quest, QuestIcon, QuestTile, RadioGroup, RadioOption, SelectOption, SoundIcon } from "./utils/components";
 import { AudioPlayer, decimalToRGB, fetchAndDispatchQuests, getFormattedNow, isDarkish, isSoundAllowed, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, QuestsStore, rightClick, validCommaSeparatedList } from "./utils/misc";
 
 let autoFetchInterval: null | ReturnType<typeof setInterval> = null;
@@ -21,7 +21,7 @@ const defaultMiddleClickAction = "plugin-settings";
 const defaultRightClickAction = "context-menu";
 const defaultQuestButtonDisplay = "always";
 const defaultQuestButtonUnclaimed = "both";
-const defaultQuestORder = "UNCLAIMED, CLAIMED, IGNORED, EXPIRED";
+const defaultQuestOrder = "UNCLAIMED, CLAIMED, IGNORED, EXPIRED";
 const defaultUnclaimedColor = 2842239;
 const defaultClaimedColor = 6105983;
 const defaultIgnoredColor = 8334124;
@@ -44,16 +44,21 @@ export function fetchAndAlertQuests(source: string, logger: Logger): void {
 
                 if (shouldAlert) {
                     logger.info(`[${getFormattedNow()}] New quests detected. Playing alert sound.`);
-
-                    setTimeout(() => {
-                        AudioPlayer(shouldAlert, 1).play();
-                    }, 1000); // Give the Quest Button a chance to update first.
+                    AudioPlayer(shouldAlert, 1).play();
                 } else {
                     logger.info(`[${getFormattedNow()}] New quests detected.`);
                 }
             }
         }
     });
+}
+
+function checkAutoFetchInterval(interval: number | null): void {
+    if (!!interval && autoFetchCompatible()) {
+        startAutoFetchingQuests();
+    } else {
+        stopAutoFetchingQuests();
+    }
 }
 
 export function startAutoFetchingQuests(seconds?: number): void {
@@ -119,12 +124,12 @@ export const intervalScales = {
 
 export function removeIgnoredQuest(questName: string): void {
     const ignoredQuests = settings.store.ignoredQuests.split("\n");
-    validateIgnoredQuests(ignoredQuests.filter(name => normalizeQuestName(name) !== normalizeQuestName(questName)).join("\n"));
+    validateAndOverwriteIgnoredQuests(ignoredQuests.filter(name => normalizeQuestName(name) !== normalizeQuestName(questName)).join("\n"));
 }
 
 export function addIgnoredQuest(questName: string): void {
     const { ignoredQuests } = settings.store;
-    validateIgnoredQuests(ignoredQuests + "\n" + normalizeQuestName(questName));
+    validateAndOverwriteIgnoredQuests(ignoredQuests + "\n" + normalizeQuestName(questName));
 }
 
 export function questIsIgnored(questName: string): boolean {
@@ -132,7 +137,7 @@ export function questIsIgnored(questName: string): boolean {
     return ignoredQuests.has(normalizeQuestName(questName));
 }
 
-export function validateIgnoredQuests(ignoredQuests?: string, questsData?: Quest[]): string {
+export function validateIgnoredQuests(ignoredQuests?: string, questsData?: Quest[]): [string, number] {
     const quests = questsData ?? Array.from(QuestsStore.quests.values()) as Quest[];
     const currentlyIgnored = new Set((ignoredQuests ?? settings.store.ignoredQuests).split("\n").map(normalizeQuestName));
     const validIgnored = new Set<string>();
@@ -152,10 +157,14 @@ export function validateIgnoredQuests(ignoredQuests?: string, questsData?: Quest
         }
     }
 
-    settings.store.unclaimedUnignoredQuests = numUnclaimedUnignoredQuests;
     const ignoredStr = Array.from(validIgnored).join("\n");
-    settings.store.ignoredQuests = ignoredStr;
+    return [ignoredStr, numUnclaimedUnignoredQuests];
+}
 
+export function validateAndOverwriteIgnoredQuests(ignoredQuests?: string, questsData?: Quest[]): string {
+    const [ignoredStr, numUnclaimedUnignoredQuests] = validateIgnoredQuests(ignoredQuests, questsData);
+    settings.store.unclaimedUnignoredQuests = numUnclaimedUnignoredQuests;
+    settings.store.ignoredQuests = ignoredStr;
     return ignoredStr;
 }
 
@@ -324,7 +333,7 @@ function validateDisableQuestSetting() {
     }
 }
 
-function QuestButtonSettings(props: { setValue: (value: QuestButtonSettingProps) => void; }): JSX.Element {
+function QuestButtonSettings(): JSX.Element {
     validateQuestButtonSetting();
 
     const {
@@ -373,90 +382,34 @@ function QuestButtonSettings(props: { setValue: (value: QuestButtonSettingProps)
 
     function handleQuestButtonDisplayChange(value: RadioOption) {
         setCurrentQuestButtonDisplay(value);
-
-        props.setValue(
-            {
-                display: value.value,
-                unclaimed: currentQuestButtonUnclaimed.value,
-                leftClickAction: currentQuestButtonLeftClickAction,
-                middleClickAction: currentQuestButtonMiddleClickAction,
-                rightClickAction: currentQuestButtonRightClickAction,
-                badgeColor: currentBadgeColor
-            }
-        );
+        settings.store.questButtonDisplay = value.value;
+        checkAutoFetchInterval(settings.store.fetchingQuestsInterval);
     }
 
     function handleQuestButtonUnclaimedChange(value: RadioOption) {
         setCurrentQuestButtonUnclaimed(value);
-
-        props.setValue(
-            {
-                display: currentQuestButtonDisplay.value,
-                unclaimed: value.value,
-                leftClickAction: currentQuestButtonLeftClickAction,
-                middleClickAction: currentQuestButtonMiddleClickAction,
-                rightClickAction: currentQuestButtonRightClickAction,
-                badgeColor: currentBadgeColor
-            }
-        );
+        settings.store.questButtonUnclaimed = value.value;
+        checkAutoFetchInterval(settings.store.fetchingQuestsInterval);
     }
 
     function handleBadgeColorChange(value: number | null) {
         setCurrentBadgeColor(value);
-
-        props.setValue(
-            {
-                display: currentQuestButtonDisplay.value,
-                unclaimed: currentQuestButtonUnclaimed.value,
-                leftClickAction: currentQuestButtonLeftClickAction,
-                middleClickAction: currentQuestButtonMiddleClickAction,
-                rightClickAction: currentQuestButtonRightClickAction,
-                badgeColor: value
-            }
-        );
+        settings.store.questButtonBadgeColor = value as any;
     }
 
     function handleLeftClickActionChange(value: "open-quests" | "context-menu" | "plugin-settings" | "nothing") {
         setCurrentQuestButtonLeftClickAction(value);
-
-        props.setValue(
-            {
-                display: currentQuestButtonDisplay.value,
-                unclaimed: currentQuestButtonUnclaimed.value,
-                leftClickAction: value,
-                middleClickAction: currentQuestButtonMiddleClickAction,
-                rightClickAction: currentQuestButtonRightClickAction,
-                badgeColor: currentBadgeColor
-            }
-        );
+        settings.store.questButtonLeftClickAction = value;
     }
+
     function handleMiddleClickActionChange(value: "open-quests" | "context-menu" | "plugin-settings" | "nothing") {
         setCurrentQuestButtonMiddleClickAction(value);
-
-        props.setValue(
-            {
-                display: currentQuestButtonDisplay.value,
-                unclaimed: currentQuestButtonUnclaimed.value,
-                leftClickAction: currentQuestButtonLeftClickAction,
-                middleClickAction: value,
-                rightClickAction: currentQuestButtonRightClickAction,
-                badgeColor: currentBadgeColor
-            }
-        );
+        settings.store.questButtonMiddleClickAction = value;
     }
+
     function handleRightClickActionChange(value: "open-quests" | "context-menu" | "plugin-settings" | "nothing") {
         setCurrentQuestButtonRightClickAction(value);
-
-        props.setValue(
-            {
-                display: currentQuestButtonDisplay.value,
-                unclaimed: currentQuestButtonUnclaimed.value,
-                leftClickAction: currentQuestButtonLeftClickAction,
-                middleClickAction: currentQuestButtonMiddleClickAction,
-                rightClickAction: value,
-                badgeColor: currentBadgeColor
-            }
-        );
+        settings.store.questButtonRightClickAction = value;
     }
 
     return (
@@ -578,7 +531,7 @@ function QuestButtonSettings(props: { setValue: (value: QuestButtonSettingProps)
     );
 }
 
-function DisableQuestsSetting(props: { setValue: (value: DisableQuestsSettingProps) => void; }): JSX.Element {
+function DisableQuestsSetting(): JSX.Element {
     validateDisableQuestSetting();
 
     const {
@@ -619,15 +572,14 @@ function DisableQuestsSetting(props: { setValue: (value: DisableQuestsSettingPro
             option.selected = enabledValues.includes(option.value);
         });
 
-        props.setValue({
-            everything: enabledValues.includes("everything"),
-            discoveryTab: enabledValues.includes("discovery"),
-            fetchingQuests: enabledValues.includes("fetching"),
-            popupAboveAccountPanel: enabledValues.includes("popup"),
-            badgeOnUserProfiles: enabledValues.includes("badge"),
-            giftInventoryRelocationNotice: enabledValues.includes("inventory"),
-            friendsListActiveNowPromotion: enabledValues.includes("friends-list")
-        });
+        settings.store.disableQuestsEverything = enabledValues.includes("everything");
+        settings.store.disableQuestsDiscoveryTab = enabledValues.includes("discovery");
+        settings.store.disableQuestsFetchingQuests = enabledValues.includes("fetching");
+        settings.store.disableQuestsPopupAboveAccountPanel = enabledValues.includes("popup");
+        settings.store.disableQuestsBadgeOnUserProfiles = enabledValues.includes("badge");
+        settings.store.disableQuestsGiftInventoryRelocationNotice = enabledValues.includes("inventory");
+        settings.store.disableFriendsListActiveNowPromotion = enabledValues.includes("friends-list");
+        checkAutoFetchInterval(settings.store.fetchingQuestsInterval);
 
         setCurrentValue(enabled);
     }
@@ -689,8 +641,9 @@ function DisableQuestsSetting(props: { setValue: (value: DisableQuestsSettingPro
     );
 }
 
-function IgnoredQuestsSetting(props: { setValue: (value: string) => void; }): JSX.Element {
-    const [value, setValue] = useState(settings.store.ignoredQuests);
+function IgnoredQuestsSetting(): JSX.Element {
+    const [ignoredQuests, setIgnoredQuests] = useState(settings.store.ignoredQuests);
+    validateAndOverwriteIgnoredQuests(ignoredQuests);
 
     return (
         <ErrorBoundary>
@@ -711,10 +664,15 @@ function IgnoredQuestsSetting(props: { setValue: (value: string) => void; }): JS
                     <div>
                         <TextArea
                             className={q("text-area")}
-                            value={value}
+                            value={ignoredQuests}
                             onChange={newValue => {
-                                setValue(newValue);
-                                props.setValue(newValue);
+                                setIgnoredQuests(newValue);
+                                const [validated, badgeNum] = validateIgnoredQuests(newValue);
+
+                                if (validated.trim() === newValue.trim()) {
+                                    settings.store.ignoredQuests = validated;
+                                    settings.store.unclaimedUnignoredQuests = badgeNum;
+                                }
                             }}
                         />
                     </div>
@@ -736,7 +694,7 @@ const DummyQuestPreview = ({ quest, dummyColor, dummyGradient }: { quest: Quest;
     );
 };
 
-function RestyleQuestsSetting(props: { setValue: (value: RestyleQuestsSettingProps) => void; }) {
+function RestyleQuestsSetting() {
     const {
         restyleQuestsUnclaimed,
         restyleQuestsClaimed,
@@ -800,41 +758,21 @@ function RestyleQuestsSetting(props: { setValue: (value: RestyleQuestsSettingPro
         if (colorIndex === 3) setExpiredColor(newColorValue);
         setDummyColor(newColorValue);
 
-        props.setValue({
-            unclaimedColor: colorIndex === 0 ? newColorValue : unclaimedColor,
-            claimedColor: colorIndex === 1 ? newColorValue : claimedColor,
-            ignoredColor: colorIndex === 2 ? newColorValue : ignoredColor,
-            expiredColor: colorIndex === 3 ? newColorValue : expiredColor,
-            gradient: restyleQuestsGradientValue as "intense" | "default" | "black" | "hide",
-            preload: restyleQuestsPreloadValue
-        });
+        settings.store.restyleQuestsUnclaimed = colorIndex === 0 ? newColorValue : unclaimedColor as any;
+        settings.store.restyleQuestsClaimed = colorIndex === 1 ? newColorValue : claimedColor as any;
+        settings.store.restyleQuestsIgnored = colorIndex === 2 ? newColorValue : ignoredColor as any;
+        settings.store.restyleQuestsExpired = colorIndex === 3 ? newColorValue : expiredColor as any;
     }
 
     function handleGradientChange(value: "intense" | "default" | "black" | "hide") {
-        setRestyleQuestsGradientValue(value);
         setDummyGradient(value);
-
-        props.setValue({
-            unclaimedColor,
-            claimedColor,
-            ignoredColor,
-            expiredColor,
-            gradient: value,
-            preload: restyleQuestsPreloadValue
-        });
+        setRestyleQuestsGradientValue(value);
+        settings.store.restyleQuestsGradient = value;
     }
 
     function handlePreloadChange(value: boolean) {
         setRestyleQuestsPreloadValue(value);
-
-        props.setValue({
-            unclaimedColor,
-            claimedColor,
-            ignoredColor,
-            expiredColor,
-            gradient: restyleQuestsGradientValue as "intense" | "default" | "black" | "hide",
-            preload: value
-        });
+        settings.store.restyleQuestsPreload = value;
     }
 
     const colorPickers = [
@@ -961,8 +899,48 @@ function RestyleQuestsSetting(props: { setValue: (value: RestyleQuestsSettingPro
     );
 }
 
-function ReorderQuestsSetting(props: { setValue: (value: string) => void; }): JSX.Element {
-    const [value, setValue] = useState(settings.store.reorderQuests);
+function ReorderQuestsSetting(): JSX.Element {
+    const [reorderQuests, setReorderQuests] = useState(settings.store.reorderQuests);
+
+    const {
+        unclaimedSubsort,
+        claimedSubsort,
+        ignoredSubsort,
+        expiredSubsort
+    } = settings.use([
+        "unclaimedSubsort",
+        "claimedSubsort",
+        "ignoredSubsort",
+        "expiredSubsort"
+    ]);
+
+    const getSubsortOptions = (source: string): SelectOption[] => {
+        const baseOptions = [
+            { label: "Added (Newest)", value: "Recent DESC" },
+            { label: "Added (Oldest)", value: "Recent ASC" }
+        ];
+
+        if (source === "expired") {
+            baseOptions.push(
+                { label: "Expired (Most Recent)", value: "Expiring DESC" },
+                { label: "Expired (Least Recent)", value: "Expiring ASC" }
+            );
+        } else if (source !== "claimed") {
+            baseOptions.push(
+                { label: "Expiring (Soonest)", value: "Expiring ASC" },
+                { label: "Expiring (Latest)", value: "Expiring DESC" }
+            );
+        }
+
+        if (source === "claimed") {
+            baseOptions.push(
+                { label: "Claimed (Most Recent)", value: "Claimed DESC" },
+                { label: "Claimed (Least Recent)", value: "Claimed ASC" }
+            );
+        }
+
+        return baseOptions;
+    };
 
     return (
         <ErrorBoundary>
@@ -982,28 +960,92 @@ function ReorderQuestsSetting(props: { setValue: (value: string) => void; }): JS
                     <div>
                         <TextInput
                             inputClassName={q("text-input")}
-                            value={value}
+                            value={reorderQuests}
                             onChange={newValue => {
                                 const trimmedValue = newValue.toUpperCase();
                                 const isValid = validCommaSeparatedList(trimmedValue, ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"], true, true, true, false);
-                                setValue(trimmedValue);
+                                setReorderQuests(trimmedValue);
 
                                 if (isValid) {
                                     const cleaned = trimmedValue
                                         .split(",")
                                         .map(item => item.trim())
                                         .join(", ");
-                                    props.setValue(cleaned);
+                                    settings.store.reorderQuests = cleaned;
                                 }
                             }}
                             placeholder="Using Discord's default sorting."
                             error={
-                                validCommaSeparatedList(value, ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"], true, true, true, false)
+                                validCommaSeparatedList(reorderQuests, ["UNCLAIMED", "CLAIMED", "IGNORED", "EXPIRED"], true, true, true, false)
                                     ? undefined
                                     : "Invalid format."
                             }
                         >
                         </TextInput>
+                    </div>
+                    <div className={q("main-inline-group")}>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Unclaimed Subsort
+                            </Forms.FormTitle>
+                            <Select
+                                options={getSubsortOptions("unclaimed")}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === unclaimedSubsort}
+                                select={(value: string) => {
+                                    settings.store.unclaimedSubsort = value;
+                                }}
+                            />
+                        </div>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Claimed Subsort
+                            </Forms.FormTitle>
+                            <Select
+                                options={getSubsortOptions("claimed")}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === claimedSubsort}
+                                select={(value: string) => {
+                                    settings.store.claimedSubsort = value;
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div className={q("main-inline-group")}>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Ignored Subsort
+                            </Forms.FormTitle>
+                            <Select
+                                options={getSubsortOptions("ignored")}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === ignoredSubsort}
+                                select={(value: string) => {
+                                    settings.store.ignoredSubsort = value;
+                                }}
+                            />
+                        </div>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Expired Subsort
+                            </Forms.FormTitle>
+                            <Select
+                                options={getSubsortOptions("expired")}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === expiredSubsort}
+                                select={(value: string) => {
+                                    settings.store.expiredSubsort = value;
+                                }}
+                            />
+                        </div>
                     </div>
                 </Forms.FormSection>
             </div>
@@ -1011,7 +1053,7 @@ function ReorderQuestsSetting(props: { setValue: (value: string) => void; }): JS
     );
 }
 
-function FetchingQuestsSetting(props: { setValue: (value: FetchingQuestsSettingProps) => void; }): JSX.Element {
+function FetchingQuestsSetting(): JSX.Element {
     const {
         fetchingQuestsInterval,
         fetchingQuestsAlert
@@ -1339,14 +1381,11 @@ function FetchingQuestsSetting(props: { setValue: (value: FetchingQuestsSettingP
                                 onSearchChange={handleScaleSearchChange}
                                 onChange={value => {
                                     const option = currentIntervalOptions.find(o => o.value === value) as SelectOption;
-
-                                    props.setValue({
-                                        interval: option.value as number,
-                                        alert: fetchingQuestsAlert
-                                    });
+                                    settings.store.fetchingQuestsInterval = option.value as number;
 
                                     setCurrentSelection(option);
                                     setCurrentIntervalOptions(getAllIntervalOptions(option));
+                                    checkAutoFetchInterval(option.value as number);
                                 }}
                             />
                         </div>
@@ -1373,11 +1412,7 @@ function FetchingQuestsSetting(props: { setValue: (value: FetchingQuestsSettingP
                                     onSearchChange={handleAlertSearchChange}
                                     onChange={value => {
                                         const option = currentAlertOptions.find(o => o.value === value) as SelectOption;
-
-                                        props.setValue({
-                                            interval: fetchingQuestsInterval,
-                                            alert: value ? option.value as string : null
-                                        });
+                                        settings.store.fetchingQuestsAlert = value ? option.value as string : null as any;
 
                                         setCurrentAlertSelection(value ? option : null);
                                         setCurrentAlertOptions(getAllAlertOptions(option));
@@ -1412,24 +1447,8 @@ function FetchingQuestsSetting(props: { setValue: (value: FetchingQuestsSettingP
 export const settings = definePluginSettings({
     disableQuests: {
         type: OptionType.COMPONENT,
-        component: (props: { setValue: (value: DisableQuestsSettingProps) => void; }) => DisableQuestsSetting(props),
-        description: "Select which Quest features to disable.",
-        onChange: (newValues: DisableQuestsSettingProps) => {
-            settings.store.disableQuestsEverything = newValues.everything;
-            settings.store.disableQuestsFetchingQuests = newValues.fetchingQuests;
-            settings.store.disableQuestsDiscoveryTab = newValues.discoveryTab;
-            settings.store.disableQuestsPopupAboveAccountPanel = newValues.popupAboveAccountPanel;
-            settings.store.disableQuestsBadgeOnUserProfiles = newValues.badgeOnUserProfiles;
-            settings.store.disableQuestsGiftInventoryRelocationNotice = newValues.giftInventoryRelocationNotice;
-            settings.store.disableFriendsListActiveNowPromotion = newValues.friendsListActiveNowPromotion;
-            const interval = settings.store.fetchingQuestsInterval;
-
-            if (!!interval && autoFetchCompatible()) {
-                startAutoFetchingQuests();
-            } else {
-                stopAutoFetchingQuests();
-            }
-        }
+        component: DisableQuestsSetting,
+        description: "Select which Quest features to disable."
     },
     disableQuestsEverything: {
         type: OptionType.BOOLEAN,
@@ -1475,23 +1494,8 @@ export const settings = definePluginSettings({
     },
     questButton: {
         type: OptionType.COMPONENT,
-        component: (props: { setValue: (value: QuestButtonSettingProps) => void; }) => QuestButtonSettings(props),
-        description: "Show a Quest button in the server list.",
-        onChange: (newValue: QuestButtonSettingProps) => {
-            settings.store.questButtonDisplay = newValue.display;
-            settings.store.questButtonUnclaimed = newValue.unclaimed;
-            settings.store.questButtonBadgeColor = newValue.badgeColor as any;
-            settings.store.questButtonLeftClickAction = newValue.leftClickAction;
-            settings.store.questButtonMiddleClickAction = newValue.middleClickAction;
-            settings.store.questButtonRightClickAction = newValue.rightClickAction;
-            const interval = settings.store.fetchingQuestsInterval;
-
-            if (!!interval && autoFetchCompatible()) {
-                startAutoFetchingQuests();
-            } else {
-                stopAutoFetchingQuests();
-            }
-        }
+        component: QuestButtonSettings,
+        description: "Show a Quest button in the server list."
     },
     questButtonDisplay: {
         type: OptionType.STRING,
@@ -1531,18 +1535,8 @@ export const settings = definePluginSettings({
     },
     fetchingQuests: {
         type: OptionType.COMPONENT,
-        component: (props: { setValue: (value: FetchingQuestsSettingProps) => void; }) => FetchingQuestsSetting(props),
-        description: "Fetch Quests from Discord.",
-        onChange: (newValue: FetchingQuestsSettingProps) => {
-            settings.store.fetchingQuestsInterval = newValue.interval as any;
-            settings.store.fetchingQuestsAlert = newValue.alert as any;
-
-            if (!!newValue.interval && autoFetchCompatible()) {
-                startAutoFetchingQuests();
-            } else {
-                stopAutoFetchingQuests();
-            }
-        }
+        component: FetchingQuestsSetting,
+        description: "Fetch Quests from Discord."
     },
     fetchingQuestsInterval: {
         type: OptionType.NUMBER | OptionType.CUSTOM,
@@ -1558,16 +1552,8 @@ export const settings = definePluginSettings({
     },
     restyleQuests: {
         type: OptionType.COMPONENT,
-        component: (props: { setValue: (value: RestyleQuestsSettingProps) => void; }) => RestyleQuestsSetting(props),
-        description: "Customize the appearance of Quest tiles in the Quests page.",
-        onChange: (newValue: RestyleQuestsSettingProps) => {
-            settings.store.restyleQuestsUnclaimed = newValue.unclaimedColor as any;
-            settings.store.restyleQuestsClaimed = newValue.claimedColor as any;
-            settings.store.restyleQuestsIgnored = newValue.ignoredColor as any;
-            settings.store.restyleQuestsExpired = newValue.expiredColor as any;
-            settings.store.restyleQuestsGradient = newValue.gradient as "intense" | "default" | "black" | "hide";
-            settings.store.restyleQuestsPreload = newValue.preload;
-        }
+        component: RestyleQuestsSetting,
+        description: "Customize the appearance of Quest tiles in the Quests page."
     },
     restyleQuestsUnclaimed: {
         type: OptionType.NUMBER | OptionType.CUSTOM,
@@ -1602,20 +1588,43 @@ export const settings = definePluginSettings({
     restyleQuestsPreload: {
         type: OptionType.BOOLEAN,
         description: "Attempt to preload the assets for the Quest tiles.",
-        default: true, // true or false
+        default: true,
         hidden: true
     },
     reorderQuests: {
         type: OptionType.COMPONENT,
         description: "Sort Quests by their status. Leave empty for default sorting. Comma-separated list must contain all of: UNCLAIMED, CLAIMED, IGNORED, EXPIRED.",
-        default: defaultQuestORder,
-        component: (props: { setValue: (value: string) => void; }) => ReorderQuestsSetting(props),
+        default: defaultQuestOrder,
+        component: ReorderQuestsSetting,
+    },
+    unclaimedSubsort: {
+        type: OptionType.STRING,
+        description: "Subsort method for unclaimed quests.",
+        default: "Expiring ASC", // "Recent ASC", "Recent DESC", "Expiring ASC", "Expiring DESC"
+        hidden: true
+    },
+    claimedSubsort: {
+        type: OptionType.STRING,
+        description: "Subsort method for claimed quests.",
+        default: "Claimed DESC", // "Recent ASC", "Recent DESC", "Claimed ASC", "Claimed DESC"
+        hidden: true
+    },
+    ignoredSubsort: {
+        type: OptionType.STRING,
+        description: "Subsort method for ignored quests.",
+        default: "Recent DESC", // "Recent ASC", "Recent DESC", "Expiring ASC", "Expiring DESC"
+        hidden: true
+    },
+    expiredSubsort: {
+        type: OptionType.STRING,
+        description: "Subsort method for expired quests.",
+        default: "Expiring DESC", // "Recent ASC", "Recent DESC", "Expiring ASC", "Expiring DESC"
+        hidden: true
     },
     ignoredQuests: {
         type: OptionType.COMPONENT,
         default: "",
-        component: props => IgnoredQuestsSetting(props),
-        onChange: (newValue: string) => { validateIgnoredQuests(newValue); }
+        component: IgnoredQuestsSetting
     },
     unclaimedUnignoredQuests: {
         type: OptionType.NUMBER,
