@@ -16,7 +16,6 @@ export const GuildlessServerListItemComponent = findComponentByCodeLazy("tooltip
 export const GuildedServerListItemPillComponent = findComponentByCodeLazy('"pill":"empty"');
 export const ServerListItemLowerBadgeComponent = findComponentByCodeLazy("STATUS_DANGER,disableColor:");
 export const ServerListItemUpperBadgeComponent = findComponentByCodeLazy("STATUS_DANGER,shape:", "iconBadge,");
-export const ColorPicker = findComponentByCodeLazy("showEyeDropper", "BACKGROUND_ACCENT");
 export const RadioGroup = findComponentByCodeLazy("radioItemIconClassName,");
 export const QuestTile = findComponentByCodeLazy(".rowIndex,trackGuildAndChannelMetadata");
 
@@ -35,7 +34,7 @@ export interface SelectOption {
     value: string | number;
 }
 
-export interface DisableQuestsSettingOption {
+export interface DynamicDropdownSettingOption {
     label: string;
     value: string;
     selected: boolean;
