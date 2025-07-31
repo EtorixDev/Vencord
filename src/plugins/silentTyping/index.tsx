@@ -117,7 +117,7 @@ function toggleLocation(locationId: string, effectiveList: string[], defaultHidd
     }
 }
 
-const silentTypingChatToggle: ChatBarButtonFactory = ({ channel, type }) => {
+const SilentTypingChatToggle: ChatBarButtonFactory = ({ channel, type }) => {
     const {
         enabled,
         chatIcon,
@@ -233,7 +233,7 @@ function checkEnabled(channel: string | Channel): boolean {
     }
 }
 
-const chatBarContextCheckbox: NavContextMenuPatchCallback = children => {
+const ChatBarContextCheckbox: NavContextMenuPatchCallback = children => {
     const {
         chatIcon,
         chatContextMenu,
@@ -295,7 +295,7 @@ export default definePlugin({
     shouldHideMembersListTypingIndicators,
 
     contextMenus: {
-        "textarea-context": chatBarContextCheckbox
+        "textarea-context": ChatBarContextCheckbox
     },
 
     patches: [
@@ -317,7 +317,7 @@ export default definePlugin({
             find: ",{avatarCutoutX",
             replacement: {
                 match: /isTyping:(\i)=!1(,typingIndicatorRef:\i,isSpeaking:)/,
-                replace: "silentTypingIsTyping:$1=$self.shouldHideMembersListTypingIndicators()?!1:arguments[0].isTyping$2"
+                replace: "silentTypingIsTyping:$1=$self.shouldHideMembersListTypingIndicators()?false:(arguments[0].isTyping??false)$2"
             }
         },
     ],
@@ -418,5 +418,5 @@ export default definePlugin({
         FluxDispatcher.dispatch({ type: "TYPING_START_LOCAL", channelId });
     },
 
-    renderChatBarButton: silentTypingChatToggle,
+    renderChatBarButton: SilentTypingChatToggle,
 });
