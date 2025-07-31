@@ -12,9 +12,9 @@ import { findLazy } from "@webpack";
 import { Button, ColorPicker, ContextMenuApi, Forms, Menu, Select, TextArea, TextInput, useEffect, useRef, useState } from "@webpack/common";
 import { JSX } from "react";
 
-import { getQuestTileClasses } from "./index";
-import { DynamicDropdown, DynamicDropdownSettingOption, GuildlessServerListItem, Quest, QuestIcon, QuestTile, RadioGroup, RadioOption, SelectOption, SoundIcon } from "./utils/components";
-import { AudioPlayer, decimalToRGB, fetchAndDispatchQuests, getFormattedNow, isDarkish, isSoundAllowed, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, QuestsStore, rightClick, validCommaSeparatedList } from "./utils/misc";
+import { activeQuestIntervals, getQuestTileClasses } from "./index";
+import { DynamicDropdown, DynamicDropdownSettingOption, GuildlessServerListItem, Quest, QuestIcon, QuestStatus, QuestTile, RadioGroup, RadioOption, SelectOption, SoundIcon } from "./utils/components";
+import { AudioPlayer, decimalToRGB, fetchAndDispatchQuests, getFormattedNow, getQuestStatus, isDarkish, isSoundAllowed, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, QuestsStore, rightClick, validCommaSeparatedList } from "./utils/misc";
 
 let defaultSounds: string[] | null = null;
 let autoFetchInterval: null | ReturnType<typeof setInterval> = null;
@@ -151,11 +151,10 @@ export function validateIgnoredQuests(ignoredQuests?: string, questsData?: Quest
     let numUnclaimedUnignoredQuests = 0;
 
     for (const quest of quests) {
+        const questStatus = getQuestStatus(quest, false);
         const normalizedName = normalizeQuestName(quest.config.messages.questName);
-        const claimedQuest = quest.userStatus?.claimedAt;
-        const questExpired = new Date(quest.config.expiresAt) < new Date();
 
-        if (!claimedQuest && !questExpired) {
+        if (questStatus === QuestStatus.Unclaimed) {
             if (currentlyIgnored.has(normalizedName)) {
                 validIgnored.add(normalizedName);
             } else {
@@ -667,7 +666,7 @@ function DisableQuestsSetting(): JSX.Element {
                         <br /><br />
                         You still must start the Quests manually. The first click will start the Quests in the background.
                         For Video Quests, subsequent clicks will open the video modal as normal. To abort the Quests, you
-                        must restart your Discord client.
+                        can open the context menu on the Quest tile and select <span className={q("inline-code-block")}>Stop Auto-Complete</span>.
                         <br /><br />
                         Using either of those options is against Discord's TOS. Use at your own risk.
                     </Forms.FormText>
@@ -1234,22 +1233,21 @@ function FetchingQuestsSetting(): JSX.Element {
 
         const options: SelectOption[] = [];
 
-        if (!!resolvedScale === false) {
+        if (!resolvedScale) {
             for (const scale of Object.values(intervalScales)) {
                 // Try each allowed scale to see if the value fits within the min/max range.
-                const valueInScale = Math.ceil((num * scale.multiplier) * 100) / 100;
-
-                if (valueInScale >= minimumAutoFetchIntervalValue && valueInScale <= maximumAutoFetchIntervalValue) {
-                    options.push(createIntervalSelectOptionFromValue(valueInScale));
+                const valueInSeconds = Math.ceil((num * scale.multiplier) * 100) / 100;
+                if (valueInSeconds >= minimumAutoFetchIntervalValue && valueInSeconds <= maximumAutoFetchIntervalValue) {
+                    options.push(createIntervalSelectOptionFromValue(valueInSeconds));
                 }
             }
         } else {
             // If a specific scale was provided, use it to create the option.
             const scale = allowedScales[resolvedScale];
-            const valueInScale = Math.ceil((num * scale.multiplier) * 100) / 100;
+            const valueInSeconds = Math.ceil((num * scale.multiplier) * 100) / 100;
 
-            if (valueInScale >= minimumAutoFetchIntervalValue && valueInScale <= maximumAutoFetchIntervalValue) {
-                options.push(createIntervalSelectOptionFromValue(valueInScale));
+            if (valueInSeconds >= minimumAutoFetchIntervalValue && valueInSeconds <= maximumAutoFetchIntervalValue) {
+                options.push(createIntervalSelectOptionFromValue(valueInSeconds));
             }
         }
 
@@ -1345,6 +1343,7 @@ function FetchingQuestsSetting(): JSX.Element {
                         </div>
                         <div>
                             <DynamicDropdown
+                                filter={(options, query) => options}
                                 placeholder="Select or type an interval between 30 minutes and 12 hours."
                                 feedback="Intervals must be between 30 minutes and 12 hours."
                                 className={q("select")}
@@ -1355,6 +1354,7 @@ function FetchingQuestsSetting(): JSX.Element {
                                 options={currentIntervalOptions}
                                 closeOnSelect={true}
                                 onSearchChange={handleScaleSearchChange}
+                                onClose={() => { setCurrentIntervalOptions(getAllIntervalOptions(currentIntervalSelection)); }}
                                 onChange={value => {
                                     const option = currentIntervalOptions.find(o => o.value === value) as SelectOption;
                                     settings.store.fetchingQuestsInterval = option.value as number;
@@ -1386,6 +1386,7 @@ function FetchingQuestsSetting(): JSX.Element {
                                     options={currentAlertOptions}
                                     closeOnSelect={false}
                                     onSearchChange={handleAlertSearchChange}
+                                    onClose={() => { setCurrentAlertOptions(getAllAlertOptions(currentAlertSelection)); }}
                                     onChange={value => {
                                         const option = currentAlertOptions.find(o => o.value === value) as SelectOption;
                                         settings.store.fetchingQuestsAlert = value ? option.value as string : null as any;
@@ -1478,13 +1479,39 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Complete Video Quests in the background after the video duration has passed.",
         default: false,
-        hidden: true
+        hidden: true,
+        onChange: (value: boolean) => {
+            if (!value) {
+                activeQuestIntervals.forEach((interval, questId) => {
+                    if (interval.type === "watch") {
+                        clearTimeout(interval.progressTimeout);
+                        clearTimeout(interval.rerenderTimeout);
+                        activeQuestIntervals.delete(questId);
+                    }
+                });
+
+                rerenderQuests();
+            }
+        }
     },
     completeGameQuestsInBackground: {
         type: OptionType.BOOLEAN,
         description: "Complete Game Quests in the background after the game duration has passed.",
         default: false,
-        hidden: true
+        hidden: true,
+        onChange: (value: boolean) => {
+            if (!value) {
+                activeQuestIntervals.forEach((interval, questId) => {
+                    if (interval.type === "play") {
+                        clearTimeout(interval.progressTimeout);
+                        clearTimeout(interval.rerenderTimeout);
+                        activeQuestIntervals.delete(questId);
+                    }
+                });
+
+                rerenderQuests();
+            }
+        },
     },
     questButton: {
         type: OptionType.COMPONENT,
