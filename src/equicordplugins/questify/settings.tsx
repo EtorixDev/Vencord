@@ -149,7 +149,7 @@ export function questIsIgnored(questID: string): boolean {
 export function validateIgnoredQuests(ignoredQuests?: string[], questsData?: Quest[]): [string[], number] {
     const quests = questsData ?? Array.from(QuestsStore.quests.values()) as Quest[];
     const excludedQuests = Array.from(QuestsStore.excludedQuests.values()) as ExcludedQuest[];
-    const currentlyIgnored = ignoredQuests?.length ? new Set(ignoredQuests) : new Set(settings.store.ignoredQuestIDs);
+    const currentlyIgnored = ignoredQuests ? new Set(ignoredQuests) : new Set(settings.store.ignoredQuestIDs);
     const validIgnored = new Set<string>();
     let numUnclaimedUnignoredQuests = 0;
 
