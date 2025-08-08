@@ -837,6 +837,8 @@ function RestyleQuestsSetting() {
                         </Forms.FormTitle>
                         <Forms.FormText className={q("form-description")}>
                             Highlight Quests with optional theme colors for visibility.
+                            <br /><br />
+                            Claimed and Expired Quest styles will take precedence even if a Quest is ignored.
                         </Forms.FormText>
                     </div>
                     <div className={q("color-picker-container")}>
@@ -1623,6 +1625,12 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Trigger a rerender of the Quests page by toggling this setting.",
         default: false,
+        hidden: true
+    },
+    ignoredQuestProfile: {
+        type: OptionType.STRING,
+        description: "The profile used for ignored Quests.",
+        default: "private", // "shared", "private"
         hidden: true
     },
     ignoredQuestIDs: {
