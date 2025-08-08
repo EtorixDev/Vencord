@@ -33,7 +33,7 @@ export function getQuestStatus(quest: Quest, checkIgnored: boolean = true): Ques
 
     if (claimedQuest) {
         return QuestStatus.Claimed;
-    } else if (checkIgnored && questIgnored) {
+    } else if (checkIgnored && questIgnored && (!expiredQuest || completedQuest)) {
         return QuestStatus.Ignored;
     } else if (completedQuest || !expiredQuest) {
         return QuestStatus.Unclaimed;

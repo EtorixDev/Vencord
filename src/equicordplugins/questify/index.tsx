@@ -35,7 +35,7 @@ function questMenuIgnoreAllClicked(): void {
         const questID = quest.id;
         const questStatus = getQuestStatus(quest, false);
 
-        if (questStatus === QuestStatus.Unclaimed || (questStatus !== QuestStatus.Expired && ignoredQuestIDs.includes(questID))) {
+        if (questStatus === QuestStatus.Unclaimed || ignoredQuestIDs.includes(questID)) {
             ignoredQuestsSet.add(questID);
         }
     }
@@ -206,11 +206,10 @@ function shouldHideFriendsListActiveNowPromotion(): boolean {
 }
 
 function shouldDisableQuestTileOptions(quest: Quest, shouldBeIgnored: boolean): boolean {
-    const questStatus = getQuestStatus(quest);
     const isIgnored = questIsIgnored(quest.id);
 
     return !(
-        (shouldBeIgnored ? isIgnored : (questStatus !== QuestStatus.Expired && !isIgnored))
+        (shouldBeIgnored ? isIgnored : !isIgnored)
     );
 }
 
@@ -293,12 +292,12 @@ export function getQuestTileClasses(originalClasses: string, quest: Quest, color
         } else if (questStatus === QuestStatus.Unclaimed && (color || restyleQuestsUnclaimed !== null)) {
             returnClasses.push(q("quest-item-restyle"));
             isRestyledAndDarkish = isDarkish(decimalToRGB(color ?? restyleQuestsUnclaimed), 0.875);
-        } else if (questStatus === QuestStatus.Ignored && (color || restyleQuestsIgnored !== null)) {
-            returnClasses.push(q("quest-item-restyle"));
-            isRestyledAndDarkish = isDarkish(decimalToRGB(color ?? restyleQuestsIgnored), 0.875);
         } else if (questStatus === QuestStatus.Expired && (color || restyleQuestsExpired !== null)) {
             returnClasses.push(q("quest-item-restyle"));
             isRestyledAndDarkish = isDarkish(decimalToRGB(color ?? restyleQuestsExpired), 0.875);
+        } else if (questStatus === QuestStatus.Ignored && (color || restyleQuestsIgnored !== null)) {
+            returnClasses.push(q("quest-item-restyle"));
+            isRestyledAndDarkish = isDarkish(decimalToRGB(color ?? restyleQuestsIgnored), 0.875);
         }
     }
 
@@ -396,10 +395,10 @@ function preprocessQuests(quests: Quest[]): Quest[] {
             questGroups.claimed.push(quest);
         } else if (questStatus === QuestStatus.Unclaimed) {
             questGroups.unclaimed.push(quest);
-        } else if (questStatus === QuestStatus.Ignored) {
-            questGroups.ignored.push(quest);
         } else if (questStatus === QuestStatus.Expired) {
             questGroups.expired.push(quest);
+        } else if (questStatus === QuestStatus.Ignored) {
+            questGroups.ignored.push(quest);
         } else {
             questGroups.unknown.push(quest);
         }
@@ -488,10 +487,10 @@ export function getQuestTileStyle(quest: Quest | null): Record<string, string> {
         themeColor = dummyProvided ? dummyColor : claimedColor || null;
     } else if (questStatus === QuestStatus.Unclaimed) {
         themeColor = dummyProvided ? dummyColor : unclaimedColor || null;
-    } else if (questStatus === QuestStatus.Ignored) {
-        themeColor = dummyProvided ? dummyColor : ignoredColor || null;
     } else if (questStatus === QuestStatus.Expired) {
         themeColor = dummyProvided ? dummyColor : expiredColor || null;
+    } else if (questStatus === QuestStatus.Ignored) {
+        themeColor = dummyProvided ? dummyColor : ignoredColor || null;
     }
 
     if (!themeColor) return style;

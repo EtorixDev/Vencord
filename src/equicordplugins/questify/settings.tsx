@@ -156,12 +156,10 @@ export function validateIgnoredQuests(ignoredQuests?: string[], questsData?: Que
     for (const quest of quests) {
         const questStatus = getQuestStatus(quest, false);
 
-        if (questStatus !== QuestStatus.Expired) {
-            if (currentlyIgnored.has(quest.id)) {
-                validIgnored.add(quest.id);
-            } else if (questStatus === QuestStatus.Unclaimed) {
-                numUnclaimedUnignoredQuests++;
-            }
+        if (currentlyIgnored.has(quest.id)) {
+            validIgnored.add(quest.id);
+        } else if (questStatus === QuestStatus.Unclaimed) {
+            numUnclaimedUnignoredQuests++;
         }
     }
 
