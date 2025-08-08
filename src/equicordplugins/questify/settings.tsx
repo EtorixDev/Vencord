@@ -712,14 +712,16 @@ function RestyleQuestsSetting() {
         restyleQuestsIgnored,
         restyleQuestsExpired,
         restyleQuestsGradient,
-        restyleQuestsPreload
+        restyleQuestsPreload,
+        ignoredQuestProfile
     } = settings.use([
         "restyleQuestsUnclaimed",
         "restyleQuestsClaimed",
         "restyleQuestsIgnored",
         "restyleQuestsExpired",
         "restyleQuestsGradient",
-        "restyleQuestsPreload"
+        "restyleQuestsPreload",
+        "ignoredQuestProfile"
     ]);
 
     const [unclaimedColor, setUnclaimedColor] = useState<number | null>(restyleQuestsUnclaimed);
@@ -841,6 +843,54 @@ function RestyleQuestsSetting() {
                             Claimed and Expired Quest styles will take precedence even if a Quest is ignored.
                         </Forms.FormText>
                     </div>
+                    <div className={q("main-inline-group")}>
+                        <div className={q("gradient-setting-group", "inline-group-item", "flex-35")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Gradient Style
+                            </Forms.FormTitle>
+                            <Select
+                                options={gradientOptions}
+                                className={q("select")}
+                                popoutPosition="top"
+                                serialize={String}
+                                isSelected={(value: string) => value === restyleQuestsGradientValue}
+                                select={handleGradientChange}
+                            />
+                        </div>
+                        <div className={q("preload-setting-group", "inline-group-item", "flex-65")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Asset Preload
+                            </Forms.FormTitle>
+                            <Select
+                                options={preloadOptions}
+                                className={q("select")}
+                                popoutPosition="top"
+                                serialize={String}
+                                isSelected={(value: boolean) => value === restyleQuestsPreloadValue}
+                                select={handlePreloadChange}
+                            />
+                        </div>
+                    </div>
+                    <div className={q("main-inline-group")}>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Ignored Quest Profile
+                            </Forms.FormTitle>
+                            <Select
+                                options={[
+                                    { label: "Shared: All accounts on this client share ignores.", value: "shared" },
+                                    { label: "Private: All accounts on this client have separate ignores.", value: "private" }
+                                ]}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === ignoredQuestProfile}
+                                select={(value: string) => {
+                                    settings.store.ignoredQuestProfile = value;
+                                }}
+                            />
+                        </div>
+                    </div>
                     <div className={q("color-picker-container")}>
                         {colorPickers.map(({ label, idx, defaultValue, value }) => (
                             <div
@@ -874,34 +924,6 @@ function RestyleQuestsSetting() {
                             </div>
                         ))}
                     </div>
-                    <div className={q("main-inline-group")}>
-                        <div className={q("gradient-setting-group", "inline-group-item", "flex-35")}>
-                            <Forms.FormTitle className={q("form-subtitle")}>
-                                Gradient Style
-                            </Forms.FormTitle>
-                            <Select
-                                options={gradientOptions}
-                                className={q("select")}
-                                popoutPosition="top"
-                                serialize={String}
-                                isSelected={(value: string) => value === restyleQuestsGradientValue}
-                                select={handleGradientChange}
-                            />
-                        </div>
-                        <div className={q("preload-setting-group", "inline-group-item", "flex-65")}>
-                            <Forms.FormTitle className={q("form-subtitle")}>
-                                Asset Preload
-                            </Forms.FormTitle>
-                            <Select
-                                options={preloadOptions}
-                                className={q("select")}
-                                popoutPosition="top"
-                                serialize={String}
-                                isSelected={(value: boolean) => value === restyleQuestsPreloadValue}
-                                select={handlePreloadChange}
-                            />
-                        </div>
-                    </div>
                     <div className={q("dummy-quest-preview")} style={dummyQuestStyle}>
                         {hasQuests && dummyQuest && (
                             <DummyQuestPreview quest={dummyQuest} dummyColor={dummyColor} dummyGradient={dummyGradient} />
@@ -920,14 +942,12 @@ function ReorderQuestsSetting(): JSX.Element {
         unclaimedSubsort,
         claimedSubsort,
         ignoredSubsort,
-        expiredSubsort,
-        ignoredQuestProfile
+        expiredSubsort
     } = settings.use([
         "unclaimedSubsort",
         "claimedSubsort",
         "ignoredSubsort",
-        "expiredSubsort",
-        "ignoredQuestProfile"
+        "expiredSubsort"
     ]);
 
     const getSubsortOptions = (source: string): SelectOption[] => {
@@ -1059,26 +1079,6 @@ function ReorderQuestsSetting(): JSX.Element {
                                 isSelected={(value: string) => value === expiredSubsort}
                                 select={(value: string) => {
                                     settings.store.expiredSubsort = value;
-                                }}
-                            />
-                        </div>
-                    </div>
-                    <div className={q("main-inline-group")}>
-                        <div className={q("inline-group-item")}>
-                            <Forms.FormTitle className={q("form-subtitle")}>
-                                Ignored Quest Profile
-                            </Forms.FormTitle>
-                            <Select
-                                options={[
-                                    { label: "Shared: All accounts on this client share ignores.", value: "shared" },
-                                    { label: "Private: All accounts on this client have separate ignores.", value: "private" }
-                                ]}
-                                className={q("select")}
-                                popoutPosition="bottom"
-                                serialize={String}
-                                isSelected={(value: string) => value === ignoredQuestProfile}
-                                select={(value: string) => {
-                                    settings.store.ignoredQuestProfile = value;
                                 }}
                             />
                         </div>
