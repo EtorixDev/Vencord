@@ -35,7 +35,8 @@ function questMenuIgnoreAllClicked(): void {
         const questID = quest.id;
         const questStatus = getQuestStatus(quest, false);
 
-        if (questStatus === QuestStatus.Unclaimed) {
+        // if (questStatus === QuestStatus.Unclaimed) {
+        if (questStatus !== QuestStatus.Expired) {
             ignoredQuestsSet.add(questID);
         }
     }
@@ -209,7 +210,8 @@ function shouldDisableQuestTileOptions(quest: Quest, shouldBeIgnored: boolean): 
     const questStatus = getQuestStatus(quest);
 
     return !(
-        (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus === QuestStatus.Unclaimed)
+        // (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus === QuestStatus.Unclaimed)
+        (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus !== QuestStatus.Expired)
     );
 }
 
