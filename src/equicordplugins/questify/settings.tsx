@@ -14,7 +14,7 @@ import { JSX } from "react";
 
 import { activeQuestIntervals, getQuestTileClasses, getQuestTileStyle } from "./index";
 import { DynamicDropdown, DynamicDropdownSettingOption, ExcludedQuest, GuildlessServerListItem, Quest, QuestIcon, QuestStatus, QuestTile, RadioGroup, RadioOption, SelectOption, SoundIcon } from "./utils/components";
-import { AudioPlayer, decimalToRGB, fetchAndDispatchQuests, getFormattedNow, getQuestStatus, isDarkish, isSoundAllowed, leftClick, middleClick, q, QuestifyLogger, QuestsStore, rightClick, validCommaSeparatedList } from "./utils/misc";
+import { AudioPlayer, decimalToRGB, fetchAndDispatchQuests, getFormattedNow, getIgnoredQuestIDs, getQuestStatus, isDarkish, isSoundAllowed, leftClick, middleClick, q, QuestifyLogger, QuestsStore, rightClick, setIgnoredQuestIDs, validCommaSeparatedList } from "./utils/misc";
 
 let defaultSounds: string[] | null = null;
 let autoFetchInterval: null | ReturnType<typeof setInterval> = null;
@@ -130,26 +130,26 @@ export const intervalScales = {
 };
 
 export function removeIgnoredQuest(questID: string): void {
-    const ignoredQuests = settings.store.ignoredQuestIDs;
+    const ignoredQuests = getIgnoredQuestIDs();
     const newIgnoredQuests = ignoredQuests.filter(id => id !== questID);
     validateAndOverwriteIgnoredQuests(newIgnoredQuests);
 }
 
 export function addIgnoredQuest(questID: string): void {
-    const ignoredQuests = settings.store.ignoredQuestIDs;
+    const ignoredQuests = getIgnoredQuestIDs();
     const newIgnoredQuests = ignoredQuests.concat(questID);
     validateAndOverwriteIgnoredQuests(newIgnoredQuests);
 }
 
 export function questIsIgnored(questID: string): boolean {
-    const ignoredQuests = settings.store.ignoredQuestIDs;
+    const ignoredQuests = getIgnoredQuestIDs();
     return ignoredQuests.includes(questID);
 }
 
 export function validateIgnoredQuests(ignoredQuests?: string[], questsData?: Quest[]): [string[], number] {
     const quests = questsData ?? Array.from(QuestsStore.quests.values()) as Quest[];
     const excludedQuests = Array.from(QuestsStore.excludedQuests.values()) as ExcludedQuest[];
-    const currentlyIgnored = ignoredQuests ? new Set(ignoredQuests) : new Set(settings.store.ignoredQuestIDs);
+    const currentlyIgnored = ignoredQuests ? new Set(ignoredQuests) : new Set(getIgnoredQuestIDs());
     const validIgnored = new Set<string>();
     let numUnclaimedUnignoredQuests = 0;
 
@@ -175,7 +175,7 @@ export function validateIgnoredQuests(ignoredQuests?: string[], questsData?: Que
 export function validateAndOverwriteIgnoredQuests(ignoredQuests?: string[], questsData?: Quest[]): string[] {
     const [validIgnored, numUnclaimedUnignoredQuests] = validateIgnoredQuests(ignoredQuests, questsData);
     settings.store.unclaimedUnignoredQuests = numUnclaimedUnignoredQuests;
-    settings.store.ignoredQuestIDs = validIgnored;
+    setIgnoredQuestIDs(validIgnored);
     return validIgnored;
 }
 
@@ -920,12 +920,14 @@ function ReorderQuestsSetting(): JSX.Element {
         unclaimedSubsort,
         claimedSubsort,
         ignoredSubsort,
-        expiredSubsort
+        expiredSubsort,
+        ignoredQuestProfile
     } = settings.use([
         "unclaimedSubsort",
         "claimedSubsort",
         "ignoredSubsort",
-        "expiredSubsort"
+        "expiredSubsort",
+        "ignoredQuestProfile"
     ]);
 
     const getSubsortOptions = (source: string): SelectOption[] => {
@@ -1057,6 +1059,26 @@ function ReorderQuestsSetting(): JSX.Element {
                                 isSelected={(value: string) => value === expiredSubsort}
                                 select={(value: string) => {
                                     settings.store.expiredSubsort = value;
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div className={q("main-inline-group")}>
+                        <div className={q("inline-group-item")}>
+                            <Forms.FormTitle className={q("form-subtitle")}>
+                                Ignored Quest Profile
+                            </Forms.FormTitle>
+                            <Select
+                                options={[
+                                    { label: "Shared: All accounts on this client share ignores.", value: "shared" },
+                                    { label: "Private: All accounts on this client have separate ignores.", value: "private" }
+                                ]}
+                                className={q("select")}
+                                popoutPosition="bottom"
+                                serialize={String}
+                                isSelected={(value: string) => value === ignoredQuestProfile}
+                                select={(value: string) => {
+                                    settings.store.ignoredQuestProfile = value;
                                 }}
                             />
                         </div>
@@ -1636,7 +1658,7 @@ export const settings = definePluginSettings({
     ignoredQuestIDs: {
         type: OptionType.CUSTOM,
         description: "An array of Quest IDs that are ignored.",
-        default: [] as string[],
+        default: {} as Record<string, string[]>,
         hidden: true,
     }
 });

@@ -16,7 +16,7 @@ import { JSX } from "react";
 
 import { addIgnoredQuest, autoFetchCompatible, fetchAndAlertQuests, maximumAutoFetchIntervalValue, minimumAutoFetchIntervalValue, questIsIgnored, removeIgnoredQuest, rerenderQuests, settings, startAutoFetchingQuests, stopAutoFetchingQuests, validateAndOverwriteIgnoredQuests } from "./settings";
 import { ExcludedQuestMap, GuildlessServerListItem, Quest, QuestIcon, QuestMap, QuestStatus, RGB } from "./utils/components";
-import { adjustRGB, decimalToRGB, fetchAndDispatchQuests, formatLowerBadge, getFormattedNow, getQuestStatus, isDarkish, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, questPath, QuestsStore, refreshQuest, reportPlayGameQuestProgress, reportVideoQuestProgress, rightClick, waitUntilEnrolled } from "./utils/misc";
+import { adjustRGB, decimalToRGB, fetchAndDispatchQuests, formatLowerBadge, getFormattedNow, getIgnoredQuestIDs, getQuestStatus, isDarkish, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, questPath, QuestsStore, refreshQuest, reportPlayGameQuestProgress, reportVideoQuestProgress, rightClick, setIgnoredQuestIDs, waitUntilEnrolled } from "./utils/misc";
 
 const patchedMobileQuests = new Set<string>();
 export const activeQuestIntervals = new Map<string, { progressTimeout: NodeJS.Timeout; rerenderTimeout: NodeJS.Timeout; progress: number; duration: number, type: string; }>();
@@ -29,7 +29,7 @@ function questMenuIgnoreAllClicked(): void {
     const quests = (QuestsStore.quests as QuestMap);
     const excludedQuests = (QuestsStore.excludedQuests as ExcludedQuestMap);
     const ignoredQuestsSet = new Set<string>();
-    const { ignoredQuestIDs } = settings.store;
+    const ignoredQuestIDs = getIgnoredQuestIDs();
 
     for (const quest of quests.values()) {
         const questID = quest.id;
@@ -46,7 +46,7 @@ function questMenuIgnoreAllClicked(): void {
         }
     }
 
-    settings.store.ignoredQuestIDs = Array.from(ignoredQuestsSet);
+    setIgnoredQuestIDs(Array.from(ignoredQuestsSet));
     settings.store.unclaimedUnignoredQuests = 0;
 }
 
@@ -101,7 +101,7 @@ export function QuestButton(): JSX.Element {
                         id={q("unignore-quests-option")}
                         label="Reset Ignored List"
                         action={questMenuUnignoreAllClicked}
-                        disabled={!settings.store.ignoredQuestIDs.length}
+                        disabled={!getIgnoredQuestIDs().length}
                     />
                     <Menu.MenuItem
                         id={q("fetch-quests-option")}
@@ -250,19 +250,21 @@ function QuestTileContextMenu(children: React.ReactNode[], props: { quest: any; 
 
 export function getQuestTileClasses(originalClasses: string, quest: Quest, color: number | null | undefined, gradient: string | undefined): string {
     const {
+        ignoredQuestIDs,
+        ignoredQuestProfile,
         restyleQuestsUnclaimed,
         restyleQuestsClaimed,
         restyleQuestsIgnored,
         restyleQuestsExpired,
-        restyleQuestsGradient,
-        ignoredQuestIDs
+        restyleQuestsGradient
     } = settings.use([
+        "ignoredQuestIDs",
+        "ignoredQuestProfile",
         "restyleQuestsUnclaimed",
         "restyleQuestsClaimed",
         "restyleQuestsIgnored",
         "restyleQuestsExpired",
-        "restyleQuestsGradient",
-        "ignoredQuestIDs"
+        "restyleQuestsGradient"
     ]);
 
     const customClasses = [
@@ -325,6 +327,7 @@ export function getQuestTileClasses(originalClasses: string, quest: Quest, color
 function preprocessQuests(quests: Quest[]): Quest[] {
     const {
         ignoredQuestIDs,
+        ignoredQuestProfile,
         reorderQuests,
         unclaimedSubsort,
         claimedSubsort,
@@ -336,6 +339,7 @@ function preprocessQuests(quests: Quest[]): Quest[] {
         triggerQuestsRerender
     } = settings.use([
         "ignoredQuestIDs",
+        "ignoredQuestProfile",
         "reorderQuests",
         "unclaimedSubsort",
         "claimedSubsort",
@@ -462,9 +466,11 @@ export function getQuestTileStyle(quest: Quest | null): Record<string, string> {
     const {
         restyleQuests,
         ignoredQuestIDs,
+        ignoredQuestProfile
     } = settings.use([
         "restyleQuests",
         "ignoredQuestIDs",
+        "ignoredQuestProfile"
     ]);
 
     const style: Record<string, string> = {};
