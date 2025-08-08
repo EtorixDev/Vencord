@@ -210,8 +210,7 @@ function shouldDisableQuestTileOptions(quest: Quest, shouldBeIgnored: boolean): 
     const questStatus = getQuestStatus(quest);
 
     return !(
-        // (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus === QuestStatus.Unclaimed)
-        (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus !== QuestStatus.Expired)
+        (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus === QuestStatus.Unclaimed)
     );
 }
 

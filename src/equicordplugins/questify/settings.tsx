@@ -160,7 +160,7 @@ export function validateIgnoredQuests(ignoredQuests?: string[], questsData?: Que
         if (questStatus !== QuestStatus.Expired) {
             if (currentlyIgnored.has(quest.id)) {
                 validIgnored.add(quest.id);
-            } else {
+            } else if (questStatus === QuestStatus.Unclaimed) {
                 numUnclaimedUnignoredQuests++;
             }
         }
