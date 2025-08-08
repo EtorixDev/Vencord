@@ -35,8 +35,7 @@ function questMenuIgnoreAllClicked(): void {
         const questID = quest.id;
         const questStatus = getQuestStatus(quest, false);
 
-        // if (questStatus === QuestStatus.Unclaimed) {
-        if (questStatus !== QuestStatus.Expired) {
+        if (questStatus === QuestStatus.Unclaimed || (questStatus !== QuestStatus.Expired && ignoredQuestIDs.includes(questID))) {
             ignoredQuestsSet.add(questID);
         }
     }
