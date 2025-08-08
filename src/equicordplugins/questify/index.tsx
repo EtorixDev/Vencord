@@ -14,7 +14,7 @@ import definePlugin, { StartAt } from "@utils/types";
 import { ContextMenuApi, Menu, NavigationRouter } from "@webpack/common";
 import { JSX } from "react";
 
-import { addIgnoredQuest, autoFetchCompatible, fetchAndAlertQuests, maximumAutoFetchIntervalValue, minimumAutoFetchIntervalValue, removeIgnoredQuest, rerenderQuests, settings, startAutoFetchingQuests, stopAutoFetchingQuests, validateAndOverwriteIgnoredQuests } from "./settings";
+import { addIgnoredQuest, autoFetchCompatible, fetchAndAlertQuests, maximumAutoFetchIntervalValue, minimumAutoFetchIntervalValue, questIsIgnored, removeIgnoredQuest, rerenderQuests, settings, startAutoFetchingQuests, stopAutoFetchingQuests, validateAndOverwriteIgnoredQuests } from "./settings";
 import { ExcludedQuestMap, GuildlessServerListItem, Quest, QuestIcon, QuestMap, QuestStatus, RGB } from "./utils/components";
 import { adjustRGB, decimalToRGB, fetchAndDispatchQuests, formatLowerBadge, getFormattedNow, getQuestStatus, isDarkish, leftClick, middleClick, normalizeQuestName, q, QuestifyLogger, questPath, QuestsStore, refreshQuest, reportPlayGameQuestProgress, reportVideoQuestProgress, rightClick, waitUntilEnrolled } from "./utils/misc";
 
@@ -207,9 +207,10 @@ function shouldHideFriendsListActiveNowPromotion(): boolean {
 
 function shouldDisableQuestTileOptions(quest: Quest, shouldBeIgnored: boolean): boolean {
     const questStatus = getQuestStatus(quest);
+    const isIgnored = questIsIgnored(quest.id);
 
     return !(
-        (shouldBeIgnored ? questStatus === QuestStatus.Ignored : questStatus === QuestStatus.Unclaimed)
+        (shouldBeIgnored ? isIgnored : (questStatus !== QuestStatus.Expired && !isIgnored))
     );
 }
 
