@@ -26,11 +26,10 @@ export const middleClick = 1;
 export const rightClick = 2;
 
 export function getQuestStatus(quest: Quest, checkIgnored: boolean = true): QuestStatus {
-    const questName = normalizeQuestName(quest.config.messages.questName);
     const completedQuest = quest.userStatus?.completedAt;
     const claimedQuest = quest.userStatus?.claimedAt;
     const expiredQuest = new Date(quest.config.expiresAt) < new Date();
-    const questIgnored = questIsIgnored(questName);
+    const questIgnored = questIsIgnored(quest.id);
 
     if (claimedQuest) {
         return QuestStatus.Claimed;
