@@ -841,7 +841,6 @@ async function runVideoQuest(quest: Quest, entry: AutoCompleteEntry, target: Aut
 
 async function runPlayQuest(quest: Quest, entry: AutoCompleteEntry, target: AutoCompleteQuestTarget): Promise<boolean> {
     quest = await waitUntilEnrolled(quest, entry, 60000, 500) ?? quest;
-    console.warn(quest);
 
     if (!isEntryActive(entry) || !quest.userStatus?.enrolledAt) {
         return false;
