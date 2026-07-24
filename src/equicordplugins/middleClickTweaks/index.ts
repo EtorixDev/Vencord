@@ -98,6 +98,8 @@ export default definePlugin({
     start() { updateListeners(); },
     stop() { updateListeners(false); },
 
+    // TODO: Remove paste handling once Discord Stable uses Electron 40+ (Chromium 144+), which defaults to native Wayland and respects GTK's primary-paste setting.
+
     patches: [
         {
             // Detects paste events triggered by the "browser" outside of input fields.
@@ -116,12 +118,12 @@ export default definePlugin({
             }
         },
         {
-            // Detects paste events triggered inside of Discord's search box.
-            find: "props.handlePastedText&&",
+            // Detects paste events triggered inside Discord's channel search editor.
+            find: "onPasteCapture:function",
             replacement: {
-                match: /(?<=clipboardData\);)/,
-                replace: "if($self.isPastingDisabled(true)){arguments[1].preventDefault?.();arguments[1].stopPropagation?.();return;};"
+                match: /(?<=onPasteCapture:function\((\i)\){)(?=\i\.insertData\(\1\.clipboardData\))/,
+                replace: "if($self.isPastingDisabled(true)){$1.preventDefault?.();$1.stopPropagation?.();return;}"
             }
-        },
+        }
     ],
 });
