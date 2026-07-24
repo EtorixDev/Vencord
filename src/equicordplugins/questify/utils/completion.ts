@@ -85,7 +85,7 @@ const reportVideoProgress = findByCodeLazy(".QUESTS_VIDEO_PROGRESS(") as (questI
 const sendHeartbeat = findByCodeLazy(".QUESTS_HEARTBEAT(") as (options: {
     questId: string;
     streamKey?: string;
-    applicationId: string;
+    applicationId?: string;
     terminal?: boolean;
     executableFingerprint?: unknown;
 }) => Promise<void>;
@@ -705,7 +705,7 @@ async function reportPlayQuestProgress(
     const attempts = options.attempts ?? 1;
     const delay = options.delay ?? 2500;
     const timeout = options.timeout ?? 10000;
-    const applicationId = options.applicationId ?? quest.config.application.id;
+    const applicationId = options.applicationId ?? entry.task.applications?.[0]?.id ?? quest.config.application?.id;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
         try {
@@ -841,6 +841,7 @@ async function runVideoQuest(quest: Quest, entry: AutoCompleteEntry, target: Aut
 
 async function runPlayQuest(quest: Quest, entry: AutoCompleteEntry, target: AutoCompleteQuestTarget): Promise<boolean> {
     quest = await waitUntilEnrolled(quest, entry, 60000, 500) ?? quest;
+    console.warn(quest);
 
     if (!isEntryActive(entry) || !quest.userStatus?.enrolledAt) {
         return false;
