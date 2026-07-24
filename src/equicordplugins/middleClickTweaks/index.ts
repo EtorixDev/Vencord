@@ -98,8 +98,6 @@ export default definePlugin({
     start() { updateListeners(); },
     stop() { updateListeners(false); },
 
-    // TODO: Remove paste handling once Discord Stable uses Electron 40+ (Chromium 144+), which defaults to native Wayland and respects GTK's primary-paste setting.
-
     patches: [
         {
             // Detects paste events triggered by the "browser" outside of input fields.
