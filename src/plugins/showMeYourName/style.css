@@ -86,7 +86,7 @@
     transition: opacity .1s ease-in-out;
 }
 
-.smyn-native-message-effect {
+.smyn-native-effect.smyn-native-message-effect {
     display: inline;
 }
 

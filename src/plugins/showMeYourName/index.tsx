@@ -360,7 +360,6 @@ interface memberListProfileReactionProps {
 interface activeNowNameProps {
     user: User | null | undefined;
     guildId?: string;
-    enabled: boolean;
     isHovered: boolean;
 }
 
@@ -387,14 +386,13 @@ function getTypingMemberListProfilesReactionsVoiceNameElement(props: memberListP
     return getTypingMemberListProfilesReactionsVoiceName(props)[1];
 }
 
-function getActiveNowNameElement({ user, guildId, enabled, isHovered }: activeNowNameProps): JSX.Element | string | null {
+function getActiveNowNameElement({ user, guildId, isHovered }: activeNowNameProps): JSX.Element | string | null {
     const name = getTypingMemberListProfilesReactionsVoiceNameText({ user, guildId, type: "membersList" });
 
-    if (!enabled || !name) return null;
+    if (!name) return null;
 
     const displayNameStyles: DisplayNameStyles | null = (
         AccessibilityStore.displayNameStylesEnabled
-        && !isPluginEnabled(ircColors.name)
         && (user as any)?.displayNameStyles
     ) || null;
 
@@ -402,7 +400,7 @@ function getActiveNowNameElement({ user, guildId, enabled, isHovered }: activeNo
         ? <DisplayNameEffectName
             name={name}
             styles={displayNameStyles}
-            animate={shouldShowNameEffects(isHovered)}
+            animate={shouldAnimateNameEffects(isHovered, settings.store.styleActiveNow)}
             showStaticEffect={settings.store.styleActiveNow}
         />
         : name;
@@ -460,15 +458,15 @@ function getDisplayNameStyles(styles: DisplayNameStyles, ignoreFont: boolean): D
 }
 
 function getDisplayNameEffectDisplayType(isHovered: boolean, showStaticEffect = true): number {
-    if (shouldShowNameEffects(isHovered)) return DisplayNameEffectDisplayTypes.ANIMATED;
+    if (shouldAnimateNameEffects(isHovered, showStaticEffect)) return DisplayNameEffectDisplayTypes.ANIMATED;
 
     return showStaticEffect
         ? DisplayNameEffectDisplayTypes.STATIC
         : DisplayNameEffectDisplayTypes.PLAIN;
 }
 
-function shouldShowNameEffects(isHovered: boolean): boolean {
-    return settings.store.alwaysShowEffects || isHovered;
+function shouldAnimateNameEffects(isHovered: boolean, isEffectVisible = true): boolean {
+    return isHovered || (isEffectVisible && settings.store.alwaysAnimateEffects);
 }
 
 function getDisplayNameEffectClassName(
@@ -564,7 +562,7 @@ function renderUsername(
     const isReaction = isReactionsTooltip || isReactionsPopout;
     const isVoice = type === "voiceChannel";
 
-    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "styleDirectMessagesList", "styleDirectMessagesMessages", "styleFriendsList", "styleActiveNow", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreEffects", "ignoreFonts", "animateEffects", "gradientGlow", "alwaysShowEffects", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
+    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "styleDirectMessagesList", "styleDirectMessagesMessages", "styleFriendsList", "styleActiveNow", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreEffects", "ignoreFonts", "animateEffects", "alwaysAnimateEffects", "gradientGlow", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
     const { messages, replies, mentions, typingIndicator, memberList, styleDirectMessagesMessages, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreEffects, ignoreFonts, animateEffects, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
 
     const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
@@ -579,7 +577,7 @@ function renderUsername(
         : isReply
             ? Boolean((messageId && hoveringRepliesMap.has(messageId)) || (groupId && hoveringRepliesMap.has(groupId)))
             : false);
-    const shouldShowHoverEffects = shouldShowNameEffects(isHovered);
+    const shouldShowHoverEffects = shouldAnimateNameEffects(isHovered, showStaticDisplayNameEffect);
     const shouldShowDisplayNameStyle = showStaticDisplayNameEffect || shouldShowHoverEffects;
 
     if (colorString && !colorStrings) {
@@ -1050,6 +1048,7 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }) => {
 
 migratePluginSetting("ShowMeYourName", "ignoreEffects", "ignoreGradients");
 migratePluginSetting("ShowMeYourName", "animateEffects", "animateGradients");
+migratePluginSetting("ShowMeYourName", "alwaysAnimateEffects", "alwaysShowEffects");
 
 const settings = definePluginSettings({
     messages: {
@@ -1151,6 +1150,12 @@ const settings = definePluginSettings({
         default: false,
         description: "Animate role gradients and display name effects on non-primary names. This is disabled by \"Ignore Effects\" and reduced motion.",
     },
+    alwaysAnimateEffects: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        displayName: "Always Animate Effects",
+        description: "Force display name effects to animate when they would already be visible, even without hover.",
+    },
     gradientGlow: {
         type: OptionType.BOOLEAN,
         default: true,
@@ -1170,11 +1175,6 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: false,
         description: "Only display custom names when in DMs, and not in servers.",
-    },
-    alwaysShowEffects: {
-        type: OptionType.BOOLEAN,
-        default: false,
-        description: "Always show effects as if you were hovering.",
     },
     includedNames: {
         type: OptionType.STRING,
@@ -1268,7 +1268,7 @@ export default definePlugin({
                 {
                     // Keep fonts at rest and gate persistent effects behind the location setting.
                     match: /(?<=userName:\i,)displayNameStyles:(\i)\?\.displayNameStyles,effectDisplayType:(\i\|\|\i\|\|\i)\?\i\.\i\.ANIMATED:\i\.\i\.PLAIN,loop:\i(?=,boldFontOpacity:)/,
-                    replace: "displayNameStyles:$1?.displayNameStyles,effectDisplayType:$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList),textClassName:$self.getDisplayNameEffectClassName($1?.displayNameStyles,$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList)),loop:$self.shouldShowNameEffects($2)"
+                    replace: "displayNameStyles:$1?.displayNameStyles,effectDisplayType:$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList),textClassName:$self.getDisplayNameEffectClassName($1?.displayNameStyles,$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList)),loop:$self.shouldAnimateNameEffects($2,$self.settings.store.styleDirectMessagesList)"
                 }
             ],
         },
@@ -1325,8 +1325,8 @@ export default definePlugin({
             replacement: [
                 {
                     // Replace the card title and apply its propagated hover state.
-                    match: /(?<=\.Header,\{priorityUser:(\i),guildId:(\i)\?\.id,title:)(\i)(?=,subtitle:.{0,200}?displayNameFont:1===(\i)\.length)/,
-                    replace: "$self.getActiveNowNameElement({user:$1.user,guildId:$2?.id,enabled:1===$4.length,isHovered:arguments[0].smynHovered})??$3"
+                    match: /(?<=\.Header,\{priorityUser:(\i),guildId:(\i)\?\.id,title:)(\i)(?=,subtitle:.{0,200}?displayNameFont:1===\i\.length)/,
+                    replace: "$self.getActiveNowNameElement({user:$1.user,guildId:$2?.id,isHovered:arguments[0].smynHovered})??$3"
                 },
                 {
                     // Add local hover state to each Active Now card.
@@ -1506,7 +1506,7 @@ export default definePlugin({
     getActiveNowNameElement,
     getDisplayNameEffectClassName,
     getDisplayNameEffectDisplayType,
-    shouldShowNameEffects,
+    shouldAnimateNameEffects,
     getTypingMemberListProfilesReactionsVoiceNameText,
     getTypingMemberListProfilesReactionsVoiceNameElement
 });
