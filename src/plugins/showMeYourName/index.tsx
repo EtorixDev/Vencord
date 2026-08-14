@@ -46,7 +46,7 @@ const UserNameWithEffects = findComponentByCodeLazy<UserNameWithEffectsProps>(
     "--custom-display-name-styles-prism-cycle"
 );
 
-const DisplayNameEffectDisplayTypes: Record<"STATIC" | "ANIMATED", number> = findByPropsLazy("PLAIN", "STATIC", "ANIMATED");
+const DisplayNameEffectDisplayTypes: Record<"PLAIN" | "STATIC" | "ANIMATED", number> = findByPropsLazy("PLAIN", "STATIC", "ANIMATED");
 const DisplayNameEffects: Record<"GRADIENT" | "GLOW" | "POP" | "GUMMY", number> = findByPropsLazy("SOLID", "GRADIENT", "NEON", "TOON", "POP", "GLOW", "PRISM", "GUMMY");
 const DisplayNameFonts: Record<"DEFAULT", number> = findByPropsLazy("DEFAULT", "CHERRY_BOMB", "CHICLE", "MUSEO_MODERNO");
 
@@ -393,14 +393,18 @@ function getActiveNowNameElement({ user, guildId, enabled, isHovered }: activeNo
     if (!enabled || !name) return null;
 
     const displayNameStyles: DisplayNameStyles | null = (
-        settings.store.styleActiveNow
-        && AccessibilityStore.displayNameStylesEnabled
+        AccessibilityStore.displayNameStylesEnabled
         && !isPluginEnabled(ircColors.name)
         && (user as any)?.displayNameStyles
     ) || null;
 
     return displayNameStyles
-        ? <DisplayNameEffectName name={name} styles={displayNameStyles} animate={shouldShowNameEffects(isHovered)} />
+        ? <DisplayNameEffectName
+            name={name}
+            styles={displayNameStyles}
+            animate={shouldShowNameEffects(isHovered)}
+            showStaticEffect={settings.store.styleActiveNow}
+        />
         : name;
 }
 
@@ -455,10 +459,12 @@ function getDisplayNameStyles(styles: DisplayNameStyles, ignoreFont: boolean): D
         : styles;
 }
 
-function getDisplayNameEffectDisplayType(isHovered: boolean): number {
-    return shouldShowNameEffects(isHovered)
-        ? DisplayNameEffectDisplayTypes.ANIMATED
-        : DisplayNameEffectDisplayTypes.STATIC;
+function getDisplayNameEffectDisplayType(isHovered: boolean, showStaticEffect = true): number {
+    if (shouldShowNameEffects(isHovered)) return DisplayNameEffectDisplayTypes.ANIMATED;
+
+    return showStaticEffect
+        ? DisplayNameEffectDisplayTypes.STATIC
+        : DisplayNameEffectDisplayTypes.PLAIN;
 }
 
 function shouldShowNameEffects(isHovered: boolean): boolean {
@@ -483,16 +489,19 @@ function getDisplayNameEffectClassName(
     ].filter(Boolean).join(" ");
 }
 
-function DisplayNameEffectName({ name, styles, animate, ignoreFont = false, useMessageLayout = false }: {
+function DisplayNameEffectName({ name, styles, animate, ignoreFont = false, showStaticEffect = true, useMessageLayout = false }: {
     name: string;
     styles: DisplayNameStyles;
     animate: boolean;
     ignoreFont?: boolean;
+    showStaticEffect?: boolean;
     useMessageLayout?: boolean;
 }) {
     const effectDisplayType = animate
         ? DisplayNameEffectDisplayTypes.ANIMATED
-        : DisplayNameEffectDisplayTypes.STATIC;
+        : showStaticEffect
+            ? DisplayNameEffectDisplayTypes.STATIC
+            : DisplayNameEffectDisplayTypes.PLAIN;
 
     return (
         <UserNameWithEffects
@@ -555,12 +564,15 @@ function renderUsername(
     const isReaction = isReactionsTooltip || isReactionsPopout;
     const isVoice = type === "voiceChannel";
 
-    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "styleDirectMessagesList", "styleFriendsList", "styleActiveNow", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreEffects", "ignoreFonts", "animateEffects", "gradientGlow", "alwaysShowEffects", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
-    const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreEffects, ignoreFonts, animateEffects, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
+    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "styleDirectMessagesList", "styleDirectMessagesMessages", "styleFriendsList", "styleActiveNow", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreEffects", "ignoreFonts", "animateEffects", "gradientGlow", "alwaysShowEffects", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
+    const { messages, replies, mentions, typingIndicator, memberList, styleDirectMessagesMessages, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreEffects, ignoreFonts, animateEffects, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
 
     const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
     const message = channelId && messageId ? MessageStore.getMessage(channelId, messageId) : null;
     const groupId = (message as any)?.showMeYourNameGroupId || null;
+    const showStaticDisplayNameEffect = !isMessage
+        || !(channel?.isDM() || channel?.isGroupDM())
+        || styleDirectMessagesMessages;
 
     const isHovered = isHoveredOverride ?? ((isMessage || isMention)
         ? Boolean((messageId && hoveringMessageMap.has(messageId)) || (groupId && hoveringMessageMap.has(groupId)))
@@ -568,6 +580,7 @@ function renderUsername(
             ? Boolean((messageId && hoveringRepliesMap.has(messageId)) || (groupId && hoveringRepliesMap.has(groupId)))
             : false);
     const shouldShowHoverEffects = shouldShowNameEffects(isHovered);
+    const shouldShowDisplayNameStyle = showStaticDisplayNameEffect || shouldShowHoverEffects;
 
     if (colorString && !colorStrings) {
         colorStrings = {
@@ -814,6 +827,7 @@ function renderUsername(
                                 name={first.name}
                                 styles={authorDisplayNameStyles}
                                 animate={shouldShowHoverEffects}
+                                showStaticEffect={showStaticDisplayNameEffect}
                                 useMessageLayout={isMessage}
                             />
                             : first.wrapped}
@@ -842,7 +856,7 @@ function renderUsername(
                         style={{
                             ...(ignoreFonts ? { fontFamily: "var(--font-primary)", letterSpacing: "normal" } : {}),
                             ...getSecondaryNameStyle(
-                                name.style,
+                                shouldShowDisplayNameStyle ? name.style : null,
                                 shouldShowSecondaryDisplayNameEffect,
                                 ignoreEffects,
                                 shouldAnimatePrimaryGradient && shouldAnimateSecondaryEffects,
@@ -855,6 +869,7 @@ function renderUsername(
                                 styles={authorDisplayNameStyles}
                                 animate={shouldAnimateSecondaryEffects}
                                 ignoreFont={ignoreFonts}
+                                showStaticEffect={showStaticDisplayNameEffect}
                                 useMessageLayout={isMessage}
                             />
                             : name.wrapped}
@@ -1066,19 +1081,25 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         displayName: "Style Direct Messages List",
-        description: "Apply users' display name fonts and effects to unselected entries in the direct messages list. The selected entry is always styled.",
+        description: "Show display name effects on unselected entries without requiring hover. Selected and hovered entries are still styled when disabled.",
+    },
+    styleDirectMessagesMessages: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        displayName: "Style Direct Messages Messages",
+        description: "Show display name effects on message authors without requiring hover. Hovered names are still styled when disabled.",
     },
     styleFriendsList: {
         type: OptionType.BOOLEAN,
         default: true,
         displayName: "Style Friends List",
-        description: "Apply users' display name fonts and effects in the friends list.",
+        description: "Show display name effects without requiring hover. Hovered entries are still styled when disabled.",
     },
     styleActiveNow: {
         type: OptionType.BOOLEAN,
         default: true,
         displayName: "Style Active Now",
-        description: "Apply users' display name fonts and effects in Active Now.",
+        description: "Show display name effects without requiring hover. Hovered entries are still styled when disabled.",
     },
     profilePopout: {
         type: OptionType.BOOLEAN,
@@ -1245,14 +1266,9 @@ export default definePlugin({
                     replace: "$self.getTypingMemberListProfilesReactionsVoiceNameText({...arguments[0],type:\"membersList\"})??"
                 },
                 {
-                    // Gate inactive DM styling and keep every animated DM state looping consistently.
+                    // Keep fonts at rest and gate persistent effects behind the location setting.
                     match: /(?<=userName:\i,)displayNameStyles:(\i)\?\.displayNameStyles,effectDisplayType:(\i\|\|\i\|\|\i)\?\i\.\i\.ANIMATED:\i\.\i\.PLAIN,loop:\i(?=,boldFontOpacity:)/,
-                    replace: "displayNameStyles:$self.settings.store.styleDirectMessagesList||arguments[0].selected?$1?.displayNameStyles:null,effectDisplayType:$self.getDisplayNameEffectDisplayType($2),textClassName:$self.getDisplayNameEffectClassName($self.settings.store.styleDirectMessagesList||arguments[0].selected?$1?.displayNameStyles:null,$self.getDisplayNameEffectDisplayType($2)),loop:$self.shouldShowNameEffects($2)"
-                },
-                {
-                    // Remove Discord's display-style layout flag from unselected rows when styling is disabled.
-                    match: /(?<=\i=\(0,\i\.\i\)\(\{location:"PrivateChannel"}\)&&)(\i\?\.displayNameStyles!=null)/,
-                    replace: "($self.settings.store.styleDirectMessagesList||arguments[0].selected)&&$1"
+                    replace: "displayNameStyles:$1?.displayNameStyles,effectDisplayType:$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList),textClassName:$self.getDisplayNameEffectClassName($1?.displayNameStyles,$self.getDisplayNameEffectDisplayType($2,$self.settings.store.styleDirectMessagesList)),loop:$self.shouldShowNameEffects($2)"
                 }
             ],
         },
@@ -1264,7 +1280,7 @@ export default definePlugin({
                 {
                     // Pass the row hover state to Discord's native display-name component.
                     match: /(?<=\(0,\i\.jsx\)\(\i\.\i,\{user:\i,nick:\i,)(?=botClass:)/,
-                    replace: "displayNameStylesType:$self.getDisplayNameEffectDisplayType(arguments[0].hovered),smynStyleDisplayName:$self.settings.store.styleFriendsList,"
+                    replace: "displayNameStylesType:$self.getDisplayNameEffectDisplayType(arguments[0].hovered,$self.settings.store.styleFriendsList),"
                 },
                 {
                     // Replace the displayed friend name.
@@ -1289,12 +1305,12 @@ export default definePlugin({
                 {
                     // Keep the user's display name styles when SMYN supplies the name.
                     match: /(?<=showStreamerModeTooltip:\i&&\i\.\i\.isNameConcealed\(e\),displayNameStyles:)\i!==\i\?(\i\.displayNameStyles):null/,
-                    replace: "smynStyleDisplayName&&!arguments[0].forceUsername?$1:null"
+                    replace: "!arguments[0].forceUsername?$1:null"
                 },
                 {
-                    // Default to static styling and consume the Friends-list style marker.
+                    // Render native display name effects statically before hover.
                     match: /(?<=displayNameStylesType:\i=\i\.\i\.)PLAIN(?=,\.\.\.\i}=e)/,
-                    replace: "STATIC,smynStyleDisplayName=!0"
+                    replace: "STATIC"
                 },
                 {
                     // Attach SMYN's effect-specific classes.
