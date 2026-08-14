@@ -9,7 +9,7 @@ import "./style.css";
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { DataStore } from "@api/index";
 import { isPluginEnabled } from "@api/PluginManager";
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, migratePluginSetting } from "@api/Settings";
 import { TextButton } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
@@ -19,13 +19,36 @@ import { Devs, EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/index";
 import definePlugin, { OptionType } from "@utils/types";
 import { GuildMember, Message, RenderModalProps, User } from "@vencord/discord-types";
-import { findByCodeLazy } from "@webpack";
+import { findByCodeLazy, findByPropsLazy, findComponentByCodeLazy } from "@webpack";
 import { AccessibilityStore, ChannelStore, GuildMemberStore, GuildStore, Menu, MessageStore, Modal, openModal, RelationshipStore, StreamerModeStore, TextInput, useEffect, UserStore, useState } from "@webpack/common";
 import { JSX } from "react";
 
 const SMYNC = classNameFactory();
 const wrapEmojis = findByCodeLazy("lastIndex;return");
-const adjustColor = findByCodeLazy("light1", '.get("hsl.s"))');
+
+interface DisplayNameStyles {
+    colors: number[];
+    effectId: number;
+    fontId: number;
+}
+
+interface UserNameWithEffectsProps {
+    userName: string;
+    displayNameStyles: DisplayNameStyles;
+    effectDisplayType: number;
+    textClassName?: string;
+    loop?: boolean;
+    shouldWrap?: boolean;
+}
+
+const UserNameWithEffects = findComponentByCodeLazy<UserNameWithEffectsProps>(
+    "UserNameWithEffects",
+    "--custom-display-name-styles-prism-cycle"
+);
+
+const DisplayNameEffectDisplayTypes: Record<"STATIC" | "ANIMATED", number> = findByPropsLazy("PLAIN", "STATIC", "ANIMATED");
+const DisplayNameEffects: Record<"GRADIENT" | "GLOW" | "POP" | "GUMMY", number> = findByPropsLazy("SOLID", "GRADIENT", "NEON", "TOON", "POP", "GLOW", "PRISM", "GUMMY");
+const DisplayNameFonts: Record<"DEFAULT", number> = findByPropsLazy("DEFAULT", "CHERRY_BOMB", "CHICLE", "MUSEO_MODERNO");
 
 const roleColorPattern = /^role((?:\+|-)\d{0,4})?$/iu;
 const symbolPattern = /^[\p{S}\p{P}]{1,3}$/iu;
@@ -106,7 +129,7 @@ function validColor(color: string) {
 
 function resolveColor(
     colorStrings: colorStringsType,
-    displayNameStyles: { effectId: number; colors: number[]; } | null | undefined,
+    displayNameStyles: DisplayNameStyles | null | undefined,
     savedColor: string,
     canUseGradient: boolean,
     inGuild: boolean,
@@ -397,40 +420,63 @@ function getMentionNameElement(props: mentionProps): JSX.Element | null {
     return renderUsername(author, channelId || null, nestedProps?.messageId || null, "mentions", mentionSymbol, false, !!channel?.guild_id, colorString, colorStrings)[1];
 }
 
-function getEffectType(effectId: number | null | undefined): string | null {
-    switch (effectId) {
-        case 1: return "solid";
-        // Delegate gradient effect handling to the guild
-        // gradient handler. This adds animation to DM
-        // gradients which are usually static.
-        // case 2: return "gradient";
-        case 3: return "neon";
-        case 4: return "toon";
-        case 5: return "pop";
-        default: return null;
-    }
+function getDisplayNameStyles(styles: DisplayNameStyles, ignoreFont: boolean): DisplayNameStyles {
+    return ignoreFont
+        ? { ...styles, fontId: DisplayNameFonts.DEFAULT }
+        : styles;
 }
 
-function computeEffectCSSVars(styles: any): Record<string, string> {
-    if (!styles?.colors?.length) return {};
+function DisplayNameEffectName({ name, styles, animate, ignoreFont = false }: {
+    name: string;
+    styles: DisplayNameStyles;
+    animate: boolean;
+    ignoreFont?: boolean;
+}) {
+    const useGradientAnimationOverride = needsGradientAnimationOverride(styles)
+        && animate
+        && !AccessibilityStore.useReducedMotion;
+    const nativeEffectClassName = [
+        "smyn-native-effect",
+        useGradientAnimationOverride && "smyn-native-gradient-animated",
+        useGradientAnimationOverride && styles.colors.length > 2 && "smyn-native-gradient-three-color",
+        styles.effectId === DisplayNameEffects.POP && "smyn-native-pop",
+        styles.effectId === DisplayNameEffects.GUMMY && "smyn-native-gummy",
+    ].filter(Boolean).join(" ");
 
-    const toHex = (n: number) => `#${(n >>> 0).toString(16).padStart(6, "0")}`;
-    const primary = toHex(styles.colors[0]);
-    const secondary = styles.colors.length > 1 ? toHex(styles.colors[1]) : primary;
-    const adjusted = adjustColor(primary);
+    return (
+        <UserNameWithEffects
+            userName={name}
+            displayNameStyles={getDisplayNameStyles(styles, ignoreFont)}
+            effectDisplayType={animate
+                ? DisplayNameEffectDisplayTypes.ANIMATED
+                : DisplayNameEffectDisplayTypes.STATIC}
+            textClassName={nativeEffectClassName}
+            loop
+        />
+    );
+}
 
-    return {
-        "--smyn-effect-main-color": adjusted.main,
-        "--smyn-effect-gradient-start": primary,
-        "--smyn-effect-gradient-end": secondary,
-        "--smyn-effect-light-1": adjusted.light1,
-        "--smyn-effect-light-2": adjusted.light2,
-        "--smyn-effect-dark-1": adjusted.dark1,
-        "--smyn-effect-dark-2": adjusted.dark2,
-        "--smyn-effect-neon-stroke": adjusted.neonStroke,
-        "--smyn-effect-neon-flicker": `hsl(from ${adjusted.main} h calc(min(1, s) * ((s * 1.1) + 10)) 85)`,
-        "--smyn-effect-toon-stroke": adjusted.toonStroke,
-    };
+function needsGradientAnimationOverride(styles: DisplayNameStyles | null | undefined): boolean {
+    return styles?.effectId === DisplayNameEffects.GRADIENT
+        || styles?.effectId === DisplayNameEffects.GLOW;
+}
+
+function getSecondaryNameStyle(
+    style: Record<string, any> | null,
+    useNativeEffect: boolean,
+    ignoreEffects: boolean,
+    animateGradient: boolean,
+    showGradientGlow: boolean,
+): Record<string, any> {
+    if (!style) return {};
+    if (useNativeEffect) {
+        if (!showGradientGlow || !style.gradient) return {};
+        return animateGradient ? style.gradient.animated : style.gradient.static.original;
+    }
+
+    if (ignoreEffects) return style.normal.adjusted;
+    if (animateGradient && style.gradient) return style.gradient.animated;
+    return style.gradient?.static.original ?? style.normal.adjusted;
 }
 
 function renderUsername(
@@ -455,8 +501,8 @@ function renderUsername(
     const isReaction = isReactionsTooltip || isReactionsPopout;
     const isVoice = type === "voiceChannel";
 
-    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreGradients", "ignoreFonts", "animateGradients", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
-    const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreGradients, ignoreFonts, animateGradients, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
+    const config = hookless ? settings.store : settings.use(["messages", "replies", "mentions", "typingIndicator", "memberList", "profilePopout", "reactions", "friendNameOnlyInDirectMessages", "customNameOnlyInDirectMessages", "discriminators", "hideDefaultAtSign", "truncateAllNamesWithStreamerMode", "removeDuplicates", "ignoreEffects", "ignoreFonts", "animateEffects", "includedNames", "customNameColor", "friendNameColor", "nicknameColor", "displayNameColor", "usernameColor", "nameSeparator", "triggerNameRerender"]);
+    const { messages, replies, mentions, typingIndicator, memberList, profilePopout, reactions, friendNameOnlyInDirectMessages, customNameOnlyInDirectMessages, discriminators, truncateAllNamesWithStreamerMode, removeDuplicates, ignoreEffects, ignoreFonts, animateEffects, includedNames, customNameColor, friendNameColor, nicknameColor, displayNameColor, usernameColor, nameSeparator, triggerNameRerender } = config;
 
     const channel = channelId ? ChannelStore.getChannel(channelId) || null : null;
     const message = channelId && messageId ? MessageStore.getMessage(channelId, messageId) : null;
@@ -481,13 +527,14 @@ function renderUsername(
     const ircColorsEnabled = isPluginEnabled(ircColors.name);
 
     const authorColorStrings = colorStrings || (author as any)?.colorStrings || null;
-    const authorDisplayNameStyles = (!inGuild && !ircColorsEnabled && (author as any)?.displayNameStyles) || null;
-    const effectType = authorDisplayNameStyles ? getEffectType(authorDisplayNameStyles.effectId) : null;
-    const effectCSSVars = authorDisplayNameStyles ? computeEffectCSSVars(authorDisplayNameStyles) : {};
-    const hasEffect = !!effectType;
-    const needsEffectDataAttr = effectType === "neon" || effectType === "toon" || effectType === "pop";
-    const shouldShowEffect = hasEffect && isHovering;
-    const shouldAnimateEffect = shouldShowEffect && !AccessibilityStore.useReducedMotion;
+    const authorDisplayNameStyles: DisplayNameStyles | null = (
+        !inGuild
+        && !ircColorsEnabled
+        && AccessibilityStore.displayNameStylesEnabled
+        && (author as any)?.displayNameStyles
+    ) || null;
+    const shouldShowDisplayNameEffect = !!authorDisplayNameStyles && isHovering;
+    const usesGradientAnimationOverride = needsGradientAnimationOverride(authorDisplayNameStyles);
 
     const canUseGradient = ((author as GuildMember)?.guildId ? (GuildStore.getGuild((author as GuildMember).guildId) ?? {}).premiumFeatures?.features.includes("ENHANCED_ROLE_COLORS") : !inGuild);
     const useTopRoleStyle = isMention || isReactionsPopout || channel?.isDM() || channel?.isGroupDM();
@@ -634,15 +681,16 @@ function renderUsername(
     fourth = remainingNames.shift();
     fifth = remainingNames.shift();
 
-    const shouldGradientGlow = isHovering && hasGradient;
-    const shouldAnimateGradients = shouldGradientGlow && !AccessibilityStore.useReducedMotion;
-    const shouldAnimateSecondaryNames = animateGradients && !ignoreGradients;
+    const shouldShowGradientGlow = isHovering && hasGradient && (!authorDisplayNameStyles || usesGradientAnimationOverride);
+    const shouldAnimatePrimaryGradient = shouldShowGradientGlow && !AccessibilityStore.useReducedMotion;
+    const shouldAnimateSecondaryEffects = animateEffects && !ignoreEffects;
+    const shouldShowSecondaryDisplayNameEffect = shouldShowDisplayNameEffect && !ignoreEffects;
 
     const firstDataText = mentionSymbol + first.name;
-    const secondDataText = second && shouldAnimateSecondaryNames ? second.name : "";
-    const thirdDataText = third && shouldAnimateSecondaryNames ? third.name : "";
-    const fourthDataText = fourth && shouldAnimateSecondaryNames ? fourth.name : "";
-    const fifthDataText = fifth && shouldAnimateSecondaryNames ? fifth.name : "";
+    const secondDataText = second && shouldAnimateSecondaryEffects ? second.name : "";
+    const thirdDataText = third && shouldAnimateSecondaryEffects ? third.name : "";
+    const fourthDataText = fourth && shouldAnimateSecondaryEffects ? fourth.name : "";
+    const fifthDataText = fifth && shouldAnimateSecondaryEffects ? fifth.name : "";
     const allDataText = [firstDataText, secondDataText, thirdDataText, fourthDataText, fifthDataText].filter(Boolean).join(nameSeparator).trim();
 
     // Only mentions and reactions popouts should patch in the gradient glow or else a double glow will appear on messages.
@@ -671,43 +719,49 @@ function renderUsername(
         ...(isReactionsPopout
             ? { display: "flex", flexWrap: "wrap", lineHeight: "1.1em", fontSize: "0.9em" }
             : {}),
-        ...(hasEffect ? effectCSSVars : {}),
-        "--smyn-gradient-duration": `${animationDuration}s`
+        "--smyn-gradient-duration": `${animationDuration}s`,
+        "--smyn-underline-color": topRoleStyle?.normal.original?.["text-decoration-color"],
     } as React.CSSProperties;
 
     const nameElement = (
         <span
             style={{
                 ...topLevelStyle,
-                ...(topRoleStyle?.normal.original || {})
+                ...(shouldShowDisplayNameEffect ? {} : topRoleStyle?.normal.original || {})
             }}
             className="smyn-container"
         >
             {mentionSymbol && <span>{mentionSymbol}</span>}
             {(
                 <span
-                    className={SMYNC(firstGroupClasses, { [gradientClasses]: shouldGradientGlow })}
-                    data-text={shouldGradientGlow ? firstDataText : undefined}
-                    style={(shouldGradientGlow && useTopRoleStyle && topRoleStyle ? topRoleStyle.gradient.animated : undefined) as React.CSSProperties}
+                    className={SMYNC(firstGroupClasses, { [gradientClasses]: shouldShowGradientGlow })}
+                    data-text={shouldShowGradientGlow ? firstDataText : undefined}
+                    style={(shouldShowGradientGlow && useTopRoleStyle && topRoleStyle?.gradient
+                        ? shouldAnimatePrimaryGradient
+                            ? topRoleStyle.gradient.animated
+                            : topRoleStyle.gradient.static.original
+                        : undefined) as React.CSSProperties}
                 >
                     <span
-                        className={SMYNC(firstNameClasses, {
-                            "smyn-effect-container": shouldShowEffect,
-                            [`smyn-effect-${effectType}`]: shouldShowEffect,
-                            "smyn-effect-animated": shouldAnimateEffect
-                        })}
-                        data-username-with-effects={needsEffectDataAttr && shouldShowEffect ? first.name : undefined}
-                        style={shouldShowEffect
+                        className={SMYNC(firstNameClasses)}
+                        style={shouldShowDisplayNameEffect
                             ? undefined
                             : topRoleStyle ?
-                                shouldAnimateGradients && topRoleStyle.gradient
+                                shouldAnimatePrimaryGradient && topRoleStyle.gradient
                                     ? topRoleStyle.gradient.animated
                                     : topRoleStyle.gradient
                                         ? topRoleStyle.gradient.static.original
                                         : topRoleStyle.normal.original
                                 : undefined
                         }>
-                        {first.wrapped}</span>
+                        {shouldShowDisplayNameEffect && authorDisplayNameStyles
+                            ? <DisplayNameEffectName
+                                name={first.name}
+                                styles={authorDisplayNameStyles}
+                                animate
+                            />
+                            : first.wrapped}
+                    </span>
                 </span>
             )}
             {[
@@ -726,26 +780,28 @@ function renderUsername(
                     <span
                         // On non-primary names, allow disabling the effects completely, or just their animation & glow.
                         className={SMYNC(nameClass, {
-                            [gradientClasses]: shouldGradientGlow && shouldAnimateSecondaryNames,
-                            "smyn-effect-container": shouldShowEffect && !ignoreGradients,
-                            [`smyn-effect-${effectType}`]: shouldShowEffect && !ignoreGradients,
-                            "smyn-effect-animated": shouldAnimateEffect && shouldAnimateSecondaryNames
+                            [gradientClasses]: shouldShowGradientGlow && shouldAnimateSecondaryEffects,
                         })}
-                        data-text={shouldGradientGlow && dataText ? dataText : undefined}
-                        data-username-with-effects={needsEffectDataAttr && shouldShowEffect && !ignoreGradients ? name.name : undefined}
+                        data-text={shouldShowGradientGlow && dataText ? dataText : undefined}
                         style={{
-                            ...(ignoreFonts ? { "font-family": "var(--font-primary)", "letter-spacing": "normal" } : {}),
-                            ...(name.style
-                                ? ignoreGradients
-                                    ? name.style.normal.adjusted
-                                    : shouldAnimateGradients && shouldAnimateSecondaryNames && name.style.gradient
-                                        ? name.style.gradient.animated
-                                        : name.style.gradient
-                                            ? name.style.gradient.static.original
-                                            : name.style.normal.adjusted
-                                : {})
+                            ...(ignoreFonts ? { fontFamily: "var(--font-primary)", letterSpacing: "normal" } : {}),
+                            ...getSecondaryNameStyle(
+                                name.style,
+                                shouldShowSecondaryDisplayNameEffect,
+                                ignoreEffects,
+                                shouldAnimatePrimaryGradient && shouldAnimateSecondaryEffects,
+                                shouldShowGradientGlow && shouldAnimateSecondaryEffects,
+                            )
                         }}>
-                        {name.wrapped}</span>
+                        {shouldShowSecondaryDisplayNameEffect && authorDisplayNameStyles
+                            ? <DisplayNameEffectName
+                                name={name.name}
+                                styles={authorDisplayNameStyles}
+                                animate={shouldAnimateSecondaryEffects}
+                                ignoreFont={ignoreFonts}
+                            />
+                            : name.wrapped}
+                    </span>
                     <span style={affixColor as React.CSSProperties} className={suffixClasses}>
                         {name.suffix}</span>
                 </span>
@@ -789,7 +845,7 @@ function addHoveringMessage(id: string) {
     hoveringMessageMap.set(id, currentCount + 1);
 
     if (currentCount === 0) {
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+        triggerNameRerender();
     }
 }
 
@@ -800,7 +856,7 @@ function removeHoveringMessage(id: string) {
 
     if (currentCount <= 1) {
         hoveringMessageMap.delete(id);
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+        triggerNameRerender();
     } else {
         hoveringMessageMap.set(id, currentCount - 1);
     }
@@ -813,7 +869,7 @@ function addHoveringReply(id: string) {
     hoveringRepliesMap.set(id, currentCount + 1);
 
     if (currentCount === 0) {
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+        triggerNameRerender();
     }
 }
 
@@ -824,7 +880,7 @@ function removeHoveringReply(id: string) {
 
     if (currentCount <= 1) {
         hoveringRepliesMap.delete(id);
-        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+        triggerNameRerender();
     } else {
         hoveringRepliesMap.set(id, currentCount - 1);
     }
@@ -832,11 +888,15 @@ function removeHoveringReply(id: string) {
 
 function addHoveringReactionPopout(id: string) {
     hoveringReactionPopoutSet.add(id);
-    settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+    triggerNameRerender();
 }
 
 function removeHoveringReactionPopout(id: string) {
     hoveringReactionPopoutSet.delete(id);
+    triggerNameRerender();
+}
+
+function triggerNameRerender() {
     settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
 }
 
@@ -862,7 +922,7 @@ function CustomNicknameModal({ modalProps, user }: { modalProps: RenderModalProp
                         }
 
                         await DataStore.set("SMYNCustomNicknames", customNicknames);
-                        settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+                        triggerNameRerender();
                         modalProps.onClose();
                     }
                 },
@@ -893,7 +953,7 @@ function CustomNicknameModal({ modalProps, user }: { modalProps: RenderModalProp
                     setValue("");
                     delete customNicknames[user.id];
                     await DataStore.set("SMYNCustomNicknames", customNicknames);
-                    settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
+                    triggerNameRerender();
                 }}
             >
                 Reset SMYN Nickname
@@ -924,6 +984,9 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }) => {
         />
     );
 };
+
+migratePluginSetting("ShowMeYourName", "ignoreEffects", "ignoreGradients");
+migratePluginSetting("ShowMeYourName", "animateEffects", "animateGradients");
 
 const settings = definePluginSettings({
     messages: {
@@ -991,15 +1054,15 @@ const settings = definePluginSettings({
         default: false,
         description: "For the non-primary names, use Discord's default fonts regardless of the user's custom nitro font.",
     },
-    ignoreGradients: {
+    ignoreEffects: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "For the non-primary names, if the role has a gradient and the color below is set to \"Role+-#\", use the primary color instead of the whole gradient, and if it has a nitro effect, ignore it entirely."
+        description: "For non-primary names, use only the primary role color and omit display name effects.",
     },
-    animateGradients: {
+    animateEffects: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "For the non-primary names, if the role has a gradient or nitro effect, animate it. This is disabled by \"Ignore Gradients\" and reduced motion.",
+        description: "Animate role gradients and display name effects on non-primary names. This is disabled by \"Ignore Effects\" and reduced motion.",
     },
     nameSeparator: {
         type: OptionType.STRING,
@@ -1260,25 +1323,11 @@ export default definePlugin({
     },
 
     flux: {
-        RELATIONSHIP_UPDATE(data) {
-            // Allows rerendering when changing friend names.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        RUNNING_STREAMER_TOOLS_CHANGE(data) {
-            // Allows rerendering when toggling streamer mode.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        ACCESSIBILITY_SYSTEM_PREFERS_REDUCED_MOTION_CHANGED(data) {
-            // Allows rerendering when toggling reduced motion.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        },
-
-        ACCESSIBILITY_SET_PREFERS_REDUCED_MOTION(data) {
-            // Allows rerendering when toggling reduced motion.
-            settings.store.triggerNameRerender = !settings.store.triggerNameRerender;
-        }
+        RELATIONSHIP_UPDATE: triggerNameRerender,
+        RUNNING_STREAMER_TOOLS_CHANGE: triggerNameRerender,
+        ACCESSIBILITY_SET_DISPLAY_NAME_STYLES_ENABLED: triggerNameRerender,
+        ACCESSIBILITY_SYSTEM_PREFERS_REDUCED_MOTION_CHANGED: triggerNameRerender,
+        ACCESSIBILITY_SET_PREFERS_REDUCED_MOTION: triggerNameRerender,
     },
 
     addHoveringMessage,
