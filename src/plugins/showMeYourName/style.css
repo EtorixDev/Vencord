@@ -90,6 +90,14 @@
     display: inline;
 }
 
+.smyn-native-gummy-animated > [data-username-with-effects] {
+    --smyn-gummy-inline-headroom: .12em;
+
+    margin-inline: calc(var(--smyn-gummy-inline-headroom) * -1);
+    padding-inline: var(--smyn-gummy-inline-headroom);
+    text-overflow: clip;
+}
+
 .smyn-container:hover {
     text-decoration-color: var(--smyn-underline-color, currentcolor);
     text-decoration-line: underline;

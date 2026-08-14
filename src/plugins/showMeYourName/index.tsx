@@ -484,6 +484,10 @@ function getDisplayNameEffectClassName(
         useGradientAnimationOverride && styles?.effectId === DisplayNameEffects.GRADIENT && settings.store.gradientGlow && "smyn-native-gradient-glow-active",
         styles?.effectId === DisplayNameEffects.POP && "smyn-native-pop",
         styles?.effectId === DisplayNameEffects.GUMMY && "smyn-native-gummy",
+        styles?.effectId === DisplayNameEffects.GUMMY
+            && effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED
+            && !AccessibilityStore.useReducedMotion
+            && "smyn-native-gummy-animated",
     ].filter(Boolean).join(" ");
 }
 
