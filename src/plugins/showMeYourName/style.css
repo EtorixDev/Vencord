@@ -55,13 +55,35 @@
 }
 
 .smyn-native-gradient-animated > [data-username-with-effects] {
-    animation: smyn-animation var(--smyn-gradient-duration) linear infinite;
-    background-image: linear-gradient(to right, var(--custom-gradient-color-1), var(--custom-gradient-color-2), var(--custom-gradient-color-1)) !important;
+    animation: smyn-animation var(--smyn-gradient-duration, 1.5s) linear infinite;
+    background-image: linear-gradient(to right, var(--custom-display-name-styles-gradient-stops), var(--custom-display-name-styles-main-color) 100%) !important;
     background-size: 100px auto !important;
 }
 
-.smyn-native-gradient-animated.smyn-native-gradient-three-color > [data-username-with-effects] {
-    background-image: linear-gradient(to right, var(--custom-gradient-color-1), var(--custom-gradient-color-2), var(--custom-gradient-color-3), var(--custom-gradient-color-1)) !important;
+.smyn-native-gradient-glow > [data-username-with-effects]::after {
+    background: inherit;
+    background-clip: text;
+    content: attr(data-username-with-effects) / "";
+    filter: blur(4px);
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+    text-indent: 0;
+    transition: opacity .1s ease-in-out;
+    -webkit-text-fill-color: transparent;
+    z-index: -1;
+}
+
+.smyn-native-gradient-glow-active > [data-username-with-effects],
+:where(span, div):has(> .smyn-native-gradient-glow-active),
+:where(span, div):has(> * > .smyn-native-gradient-glow-active),
+:where(span, div):has(> * > * > .smyn-native-gradient-glow-active) {
+    overflow: visible;
+}
+
+.smyn-native-gradient-glow-active > [data-username-with-effects]::after {
+    opacity: .7;
+    transition: opacity .1s ease-in-out;
 }
 
 .smyn-container:hover {
