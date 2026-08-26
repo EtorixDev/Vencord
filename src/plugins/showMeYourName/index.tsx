@@ -473,10 +473,24 @@ function isNativeGradientGlowActive(
     styles: DisplayNameStyles | null | undefined,
     animate: boolean,
 ): boolean {
-    return animate
+    return AccessibilityStore.displayNameStylesEnabled
+        && animate
         && styles?.effectId === DisplayNameEffects.GRADIENT
         && settings.store.gradientGlow
         && !AccessibilityStore.useReducedMotion;
+}
+
+function getNativeGradientGlowOverflowClassName(
+    styles: DisplayNameStyles | null | undefined,
+    effectDisplayType: number,
+    className: string,
+): string {
+    return SMYNC(className, {
+        "smyn-native-gradient-glow-overflow": isNativeGradientGlowActive(
+            styles,
+            effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED,
+        ),
+    });
 }
 
 function getDisplayNameEffectClassName(
@@ -1309,12 +1323,21 @@ export default definePlugin({
             ],
         },
         {
-            // Set Discord's existing friends-row hover state on pointer entry.
+            // Set and expose Discord's existing friends-row hover state.
             find: "handleMouseEnter=()=>{let{isFocused:",
-            replacement: {
-                match: /(?<=handleMouseEnter=\(\)=>\{let\{isFocused:\i,isActive:\i,onOtherHover:\i}=this.props,\{isContextMenuActive:\i}=this.state;this.setState\(\{hovered:)\i(?=}\),)/,
-                replace: "!0"
-            },
+            group: true,
+            replacement: [
+                {
+                    // Treat pointer entry as hover even when the row does not have keyboard focus.
+                    match: /(?<=handleMouseEnter=\(\)=>\{let\{isFocused:\i,isActive:\i,onOtherHover:\i}=this.props,\{isContextMenuActive:\i}=this.state;this.setState\(\{hovered:)\i(?=}\),)/,
+                    replace: "!0"
+                },
+                {
+                    // Mark the active gradient row so its native glow can animate without :has().
+                    match: /(?<=let\{role:\i,\.\.\.\i\}=\i,)(\i)=(\i\(\)\(\i,\i\.\i,null!=\i\?\{\[\i\]:\i\|\|\i\}:null,\{\[\i\.\i\]:\i\|\|\i\}\))(?=;return null!=\i\?)/,
+                    replace: "$1=$self.getNativeGradientGlowOverflowClassName(this.props.user.displayNameStyles,$self.getDisplayNameEffectDisplayType(this.state.hovered||this.props.isActive||this.state.isContextMenuActive,$self.settings.store.styleFriendsList),$2)"
+                }
+            ],
         },
         {
             // Preserve display name styles when SMYN replaces the friends-list name.
@@ -1525,6 +1548,7 @@ export default definePlugin({
     getActiveNowNameElement,
     getDisplayNameEffectClassName,
     getDisplayNameEffectDisplayType,
+    getNativeGradientGlowOverflowClassName,
     shouldAnimateNameEffects,
     getTypingMemberListProfilesReactionsVoiceNameText,
     getTypingMemberListProfilesReactionsVoiceNameElement
