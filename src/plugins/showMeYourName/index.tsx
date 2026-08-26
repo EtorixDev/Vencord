@@ -469,6 +469,16 @@ function shouldAnimateNameEffects(isHovered: boolean, isEffectVisible = true): b
     return isHovered || (isEffectVisible && settings.store.alwaysAnimateEffects);
 }
 
+function isNativeGradientGlowActive(
+    styles: DisplayNameStyles | null | undefined,
+    animate: boolean,
+): boolean {
+    return animate
+        && styles?.effectId === DisplayNameEffects.GRADIENT
+        && settings.store.gradientGlow
+        && !AccessibilityStore.useReducedMotion;
+}
+
 function getDisplayNameEffectClassName(
     styles: DisplayNameStyles | null | undefined,
     effectDisplayType: number,
@@ -476,18 +486,22 @@ function getDisplayNameEffectClassName(
     const useGradientAnimationOverride = needsGradientAnimationOverride(styles)
         && effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED
         && !AccessibilityStore.useReducedMotion;
+    const nativeGradientGlowActive = isNativeGradientGlowActive(
+        styles,
+        effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED,
+    );
 
     return [
         "smyn-native-effect",
         useGradientAnimationOverride && "smyn-native-gradient-animated",
         styles?.effectId === DisplayNameEffects.GRADIENT && settings.store.gradientGlow && "smyn-native-gradient-glow",
-        useGradientAnimationOverride && styles?.effectId === DisplayNameEffects.GRADIENT && settings.store.gradientGlow && "smyn-native-gradient-glow-active",
+        nativeGradientGlowActive && "smyn-native-gradient-glow-active",
         styles?.effectId === DisplayNameEffects.POP && "smyn-native-pop",
         styles?.effectId === DisplayNameEffects.GUMMY && "smyn-native-gummy",
         styles?.effectId === DisplayNameEffects.GUMMY
-            && effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED
-            && !AccessibilityStore.useReducedMotion
-            && "smyn-native-gummy-animated",
+        && effectDisplayType === DisplayNameEffectDisplayTypes.ANIMATED
+        && !AccessibilityStore.useReducedMotion
+        && "smyn-native-gummy-animated",
     ].filter(Boolean).join(" ");
 }
 
@@ -755,6 +769,7 @@ function renderUsername(
     const shouldAnimatePrimaryGradient = shouldShowGradientGlow && !AccessibilityStore.useReducedMotion;
     const shouldAnimateSecondaryEffects = shouldShowHoverEffects && animateEffects && !ignoreEffects;
     const shouldShowSecondaryDisplayNameEffect = shouldShowDisplayNameEffect && !ignoreEffects;
+    const nativeGradientGlowActive = isNativeGradientGlowActive(authorDisplayNameStyles, shouldShowHoverEffects);
 
     const firstDataText = mentionSymbol + first.name;
     const secondDataText = second && shouldAnimateSecondaryEffects ? second.name : "";
@@ -799,7 +814,7 @@ function renderUsername(
                 ...topLevelStyle,
                 ...(shouldShowDisplayNameEffect ? {} : topRoleStyle?.normal.original || {})
             }}
-            className="smyn-container"
+            className={SMYNC("smyn-container", { "smyn-native-gradient-glow-overflow": nativeGradientGlowActive })}
         >
             {mentionSymbol && <span>{mentionSymbol}</span>}
             {(

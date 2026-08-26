@@ -75,9 +75,9 @@
 }
 
 .smyn-native-gradient-glow-active > [data-username-with-effects],
-:where(span, div):has(> .smyn-native-gradient-glow-active),
-:where(span, div):has(> * > .smyn-native-gradient-glow-active),
-:where(span, div):has(> * > * > .smyn-native-gradient-glow-active) {
+.smyn-native-gradient-glow-overflow,
+.smyn-native-gradient-glow-overflow > .smyn-name-group,
+.smyn-native-gradient-glow-overflow > .smyn-name-group > .smyn-name {
     overflow: visible;
 }
 
