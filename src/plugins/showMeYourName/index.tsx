@@ -1641,7 +1641,7 @@ export default definePlugin({
             find: "selectionMode:\"single\",formatOption",
             replacement: {
                 match: /(?<=trailing:\i}},options:)(\i)(,placeholder)/,
-                replace: '$self.wrapFilterResults($1)$2'
+                replace: "$self.wrapFilterResults($1)$2"
             }
         },
         {
