@@ -385,7 +385,7 @@ interface messageProps {
 
 interface memberListProfileReactionProps {
     user: User | null | undefined;
-    type: "typingIndicator" | "membersList" | "profilesPopout" | "profilesTooltip" | "reactionsTooltip" | "reactionsPopout" | "voiceChannel" | "searchAutocomplete";
+    type: "typingIndicator" | "membersList" | "profilesPopout" | "profilesTooltip" | "reactionsTooltip" | "reactionsPopout" | "voiceChannel" | "searchAutocomplete" | "searchAutocompleteDropdown";
     guildId?: string;
     tags?: any;
     isHovered?: boolean;
