@@ -1637,7 +1637,7 @@ export default definePlugin({
             }
         },
         {
-            // Replace names in the search filter suggestions.
+            // Replace names in the popup modal search filter suggestions.
             find: "selectionMode:\"single\",formatOption",
             replacement: {
                 match: /(?<=trailing:\i}},options:)(\i)(,placeholder)/,
