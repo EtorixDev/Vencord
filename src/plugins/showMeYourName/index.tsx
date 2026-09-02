@@ -1625,7 +1625,7 @@ export default definePlugin({
             find: "hasOtherSearchFiltersVisible",
             replacement: {
                 match: /(\i)=(\i\.\i\.useName\((\i),\i,(\i)\))/,
-                replace: "$1=$self.getTypingMemberListProfilesReactionsVoiceNameText({user:$4,guildId:$3})??$2"
+                replace: '$1=$self.getTypingMemberListProfilesReactionsVoiceNameText({user:$4,guildId:$3,type:"searchAutocomplete"})??$2'
             }
         },
         {
