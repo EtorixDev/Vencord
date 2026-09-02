@@ -1612,7 +1612,7 @@ export default definePlugin({
             ]
         },
         {
-            // Allow custom names to be considered in the search auto complete by
+            // Allow custom names to be considered in the search autocomplete by
             // inserting custom names into the results and re-sorting them by rank.
             find: '="SearchAutocompleteStore"',
             replacement: {
