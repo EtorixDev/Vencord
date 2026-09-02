@@ -275,7 +275,7 @@ export default definePlugin({
             }
         },
         {
-            // Formats the Orbs balance on the Quests page with locale string formatting.
+            // Formats the Orbs balance in the default balance counter on the Quests page with locale string formatting.
             find: '("BalanceCounter")',
             predicate: () => !getQuestifySettings().disableQuestsEverything,
             replacement: [
@@ -284,8 +284,19 @@ export default definePlugin({
                     replace: "$1+($2>=1e6?0.8:$2>=1e3?0.4:0)"
                 },
                 {
-                    match: /(?<=children:\i.to\(\i=>`\${\i).toFixed\(0\)/,
+                    match: /(?<=children:\i.to\(\i=>`\${\i)(.toFixed\(0\))/,
                     replace: ".toLocaleString(undefined,{maximumFractionDigits:0})"
+                }
+            ]
+        },
+        {
+            // Formats the Orbs balance in the balance popout on the Quests page with locale string formatting.
+            find: "PremiumTenureRewardsOrbsBalancePopover",
+            predicate: () => !getQuestifySettings().disableQuestsEverything,
+            replacement: [
+                {
+                    match: /(?<=children:)(\i\?\?0)/,
+                    replace: "($1).toLocaleString(undefined,{maximumFractionDigits:0}),style:{'align-self':'center'}"
                 }
             ]
         },
