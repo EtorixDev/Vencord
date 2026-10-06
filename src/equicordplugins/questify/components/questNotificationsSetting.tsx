@@ -181,11 +181,7 @@ export function QuestNotificationsSetting(): JSX.Element {
             setPlayingSound(null);
         }
 
-        const player = createAudioPlayer(sound, {
-            volume: Math.max(0, Math.min(100, volume)),
-            onEnded: finishPreview,
-            onError: finishPreview,
-        });
+        const player = createAudioPlayer(sound, { volume: Math.max(0, Math.min(100, volume)), onEnded: finishPreview, onError: finishPreview });
         activePlayer.current = player;
         setPlayingSound(sound);
         player?.play();
