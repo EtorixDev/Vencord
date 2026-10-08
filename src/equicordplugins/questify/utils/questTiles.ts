@@ -10,8 +10,7 @@ import { QuestTaskType } from "@vencord/discord-types/enums";
 import { getQuestifySettings, useQuestifySettings } from "../settings/access";
 import { defaultClaimedSubsort, defaultExpiredSubsort, defaultIgnoredSubsort, defaultQuestOrder, defaultUnclaimedSubsort, type QuestOrderStatus, type QuestSubsort, type QuestTileColorSetting, type QuestTileGradient } from "../settings/def";
 import { getIgnoredQuestIDs } from "../settings/ignoredQuests";
-import { hasEnabledAutoCompleteQuestTask } from "./completion";
-import { getQuestStatus, QuestStatus } from "./questState";
+import { getQuestStatus, isQuestHidden, QuestStatus } from "./questState";
 import { adjustRGB, decimalToRGB, isDarkish, q, type RGB } from "./ui";
 
 type QuestGroupKey = "claimed" | "expired" | "ignored" | "unclaimed" | "unknown";
@@ -268,11 +267,8 @@ export function sortQuests(quests: Quest[], skip?: boolean): Quest[] {
     }
 
     const ignoredQuestIds = getIgnoredQuestIDs();
-    const hiddenStatuses = new Set<string>(questSorting.hiddenQuestStatuses);
-
-    if (hiddenStatuses.size > 0 || questSorting.hideNonAutoCompletableQuests) {
-        quests = quests.filter(quest => !hiddenStatuses.has(getQuestStatus(quest, ignoredQuestIds))
-            && (!questSorting.hideNonAutoCompletableQuests || !!quest.userStatus?.completedAt || hasEnabledAutoCompleteQuestTask(quest)));
+    if (questSorting.hiddenQuestStatuses.length > 0 || questSorting.hideNonAutoCompletableQuests) {
+        quests = quests.filter(quest => !isQuestHidden(quest, ignoredQuestIds));
     }
 
     if (skip) {
