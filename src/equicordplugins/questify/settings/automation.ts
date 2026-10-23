@@ -53,7 +53,7 @@ function onAutomationSettingsChanged(): void {
 
     const settings = getQuestifySettings();
 
-    if (settings.usedKonamiCode !== true) {
+    if (settings.usedKonamiCode !== true || !settings.allowChangingDangerousSettings) {
         stopAutomaticAutoCompletes();
     }
 
