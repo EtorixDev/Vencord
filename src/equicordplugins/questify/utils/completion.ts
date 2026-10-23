@@ -1416,9 +1416,14 @@ export function processQuests(quests: readonly Quest[], options: ProcessQuestsOp
 
             quests: for (const queuedQuest of sortedQuests) {
                 const questId = queuedQuest.id;
-                let waitedForEnrollment = false;
 
                 while (!cancelled()) {
+                    await sleep(minBatchEnrollmentDelayMs, signal);
+
+                    if (cancelled()) {
+                        break quests;
+                    }
+
                     const quest = refreshQuest(queuedQuest);
                     const action = getQuestProcessingAction(quest, options);
 
@@ -1437,7 +1442,6 @@ export function processQuests(quests: readonly Quest[], options: ProcessQuestsOp
 
                         const cooldown = getEnrollmentRateLimitRemainingSeconds();
                         const blockedUntil = getQuestifySettings().enrollmentRateLimitBlockedUntil?.[userId];
-                        const delay = Math.max(cooldown === null ? 0 : cooldown * 1000, waitedForEnrollment ? 0 : minBatchEnrollmentDelayMs);
 
                         if (cooldown !== null && blockedUntil !== loggedCooldownUntil) {
                             QL.info("QUEST_PROCESSING_COOLDOWN", { ...context, questId, retryAfter: cooldown, blockedUntil, remainingQuestCount: batch.remainingQuestCount });
@@ -1445,13 +1449,10 @@ export function processQuests(quests: readonly Quest[], options: ProcessQuestsOp
 
                         loggedCooldownUntil = blockedUntil;
 
-                        if (delay > 0) {
-                            await sleep(Math.min(delay, 60000), signal);
-                            waitedForEnrollment = true;
+                        if (cooldown !== null) {
+                            await sleep(Math.min(cooldown * 1000, 60000), signal);
                             continue;
                         }
-
-                        waitedForEnrollment = false;
                     }
 
                     const enrollment = await ensureQuestEnrolled(quest);
