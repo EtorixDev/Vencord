@@ -35,7 +35,8 @@ export function autoFetchCompatible(): boolean {
         buttonCompatible = true;
     }
 
-    const compatible = fetching && (buttonCompatible || notificationsCompatible);
+    const automationCompatible = settings.allowChangingDangerousSettings && (settings.autoEnrollQuests || settings.autoCompleteQuests);
+    const compatible = fetching && (buttonCompatible || notificationsCompatible || automationCompatible);
 
     return compatible;
 }

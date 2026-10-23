@@ -17,7 +17,8 @@ import type { JSX } from "react";
 
 import { disguiseHomeButton, QuestButton, showQuestButton } from "./components/questButton";
 import { QuestTileContextMenu } from "./components/questTileContextMenu";
-import { getQuestifySettings } from "./settings/access";
+import { getCurrentUserId, getQuestifySettings } from "./settings/access";
+import { disposeQuestAutomation, initializeQuestAutomation, processAutomaticQuests } from "./settings/automation";
 import { resetQuestsToResume, startAutoFetchingQuests, stopAutoFetchingQuests } from "./settings/fetching";
 import { validateIgnoredQuests } from "./settings/ignoredQuests";
 import { showPendingQuestifyNotice } from "./settings/notices";
@@ -26,7 +27,7 @@ import { disposeRestartTracking, initializeRestartTracking, promptToRestartIfDir
 import { settings } from "./settings/store";
 import { getSettingsModalOpen, initialQuestDataFetched, setInitialQuestDataFetched, setSettingsModalOpen } from "./state";
 import managedStyle from "./styles.css?managed";
-import { canAutoCompleteQuest, getActiveAutoCompletes, getQuestAutoCompleteProgress, getQuestButtonProps, getQuestPanelSubtitleText, hasEnabledAutoCompleteQuestTypes, processQuestForAutoComplete, resumeInterruptedAutoCompletes, setHeartbeatStackTracePatchSucceeded, setVideoProgressStackTracePatchSucceeded, stopAllAutoCompletes, stopAutoCompletesForRunningGames, stopQuestAutoComplete } from "./utils/completion";
+import { canAutoCompleteQuest, getActiveAutoCompletes, getQuestAutoCompleteProgress, getQuestButtonProps, getQuestPanelSubtitleText, getQuestProcessingBatches, hasEnabledAutoCompleteQuestTypes, processQuestForAutoComplete, resumeInterruptedAutoCompletes, setHeartbeatStackTracePatchSucceeded, setVideoProgressStackTracePatchSucceeded, stopAllAutoCompletes, stopAutoCompletesForRunningGames, stopQuestAutoComplete } from "./utils/completion";
 import { canOpenDevToolsWindow, fetchAndDispatchQuests, openDevToolsWindow, snakeToCamel } from "./utils/fetching";
 import { normalizeQuestName } from "./utils/filtering";
 import { notifyQuestCompletion, QL } from "./utils/logging";
@@ -34,7 +35,8 @@ import { getQuestEmbedProgress, getQuestPanelOverride, getQuestPanelPercentCompl
 import { getLastFilterChoices, getLastSortChoice, getQuestTileClasses, getQuestTileStyle, setLastFilterChoices, setLastSortChoice, shouldPreloadQuestAssets, sortQuests } from "./utils/questTiles";
 import { formatLowerBadge, QUEST_PAGE } from "./utils/ui";
 
-let isSwitchingAccount = false;
+let isPluginStarted = false;
+let activeAccountUserId: string | null = null;
 let didAttemptAutoCompleteResume = false;
 const notifiedCompletedQuests = new Set<string>();
 export const enabledOnStartup = PlainSettings.plugins.Questify?.enabled;
@@ -44,9 +46,21 @@ function setOnQuestsPage(force?: boolean): void {
 }
 
 function startPerAccountTasks(source: string): void {
+    const userId = getCurrentUserId();
+
+    if (!userId) {
+        return;
+    }
+
+    if (activeAccountUserId && activeAccountUserId !== userId) {
+        stopPerAccountTasks("ACCOUNT_CHANGE");
+    }
+
+    activeAccountUserId = userId;
     const startedAt = Date.now();
 
     setOnQuestsPage();
+    initializeQuestAutomation();
     startAutoFetchingQuests();
     resumeAutoCompletesIfReady();
     fetchAndDispatchQuests();
@@ -58,9 +72,11 @@ function stopPerAccountTasks(source: string, preserveResume: boolean = true): vo
     const stoppedAt = Date.now();
 
     setOnQuestsPage();
+    disposeQuestAutomation();
     stopAutoFetchingQuests();
     notifiedCompletedQuests.clear();
-    stopAllAutoCompletes({ manual: false, preserveResume, terminalHeartbeat: true });
+    stopAllAutoCompletes({ manual: false, preserveResume, terminalHeartbeat: true, userId: activeAccountUserId });
+    activeAccountUserId = null;
 
     QL.info(`STOP_TASKS-${source.toUpperCase()}`, { stoppedAt });
 }
@@ -116,6 +132,7 @@ export default definePlugin({
     enrolledIncompleteButton,
     formatLowerBadge,
     getActiveAutoCompletes,
+    getQuestProcessingBatches,
     getLastFilterChoices,
     getLastSortChoice,
     getQuestAutoCompleteProgress,
@@ -597,6 +614,7 @@ export default definePlugin({
             QL.log("QUESTS_FETCH_CURRENT_QUESTS_SUCCESS", data);
             validateIgnoredQuests(data.quests);
             resumeAutoCompletesIfReady();
+            processAutomaticQuests(data.quests);
         },
 
         QUESTS_ENROLL_SUCCESS(data: any): void {
@@ -646,10 +664,8 @@ export default definePlugin({
         },
 
         LOGIN_SUCCESS(): void {
-            if (!isSwitchingAccount || getQuestifySettings().disableQuestsEverything) {
+            if (!isPluginStarted || getQuestifySettings().disableQuestsEverything) {
                 return;
-            } else {
-                isSwitchingAccount = false;
             }
 
             setInitialQuestDataFetched(false);
@@ -657,13 +673,7 @@ export default definePlugin({
             startPerAccountTasks("LOGIN_SUCCESS");
         },
 
-        LOGOUT(data: { isSwitchingAccount?: boolean; }): void {
-            if (!data.isSwitchingAccount) {
-                return;
-            } else {
-                isSwitchingAccount = true;
-            }
-
+        LOGOUT(): void {
             setInitialQuestDataFetched(false);
             stopPerAccountTasks("LOGOUT");
         },
@@ -680,6 +690,8 @@ export default definePlugin({
     renderQuestifyButton: ErrorBoundary.wrap(QuestButton, { noop: true }),
 
     start() {
+        isPluginStarted = true;
+
         if (!enabledOnStartup && PlainSettings.plugins.Questify?.enabled) {
             setRestartDirty(true);
         }
@@ -691,6 +703,10 @@ export default definePlugin({
         }
 
         onceReady.then(() => {
+            if (!isPluginStarted) {
+                return;
+            }
+
             showPendingQuestifyNotice();
 
             if (!getQuestifySettings().disableQuestsEverything) {
@@ -702,14 +718,17 @@ export default definePlugin({
     },
 
     stop() {
+        isPluginStarted = false;
+
         const pluginEnabled = Settings.plugins.Questify?.enabled;
+        const userId = activeAccountUserId ?? getCurrentUserId();
 
         disposeRestartTracking();
         removeServerListElement(ServerListRenderPosition.Above, this.renderQuestifyButton);
         stopPerAccountTasks("PLUGIN_STOP", pluginEnabled);
 
-        if (!pluginEnabled) {
-            resetQuestsToResume();
+        if (!pluginEnabled && userId) {
+            resetQuestsToResume(undefined, userId);
         }
     }
 });
