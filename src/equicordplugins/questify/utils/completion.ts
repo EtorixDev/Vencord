@@ -1431,7 +1431,16 @@ export function processQuests(quests: readonly Quest[], options: ProcessQuestsOp
         try {
             await new Promise<void>(resolve => FluxDispatcher.wait(resolve));
 
-            const sortedQuests = Array.from(uniqueQuests.values()).sort((a, b) => getQuestExpiryTime(a) - getQuestExpiryTime(b));
+            const sortedQuests = Array.from(uniqueQuests.values())
+                .map(refreshQuest)
+                .filter(quest => {
+                    const action = getQuestProcessingAction(quest, options);
+
+                    return action.enroll || action.complete;
+                })
+                .sort((a, b) => getQuestExpiryTime(a) - getQuestExpiryTime(b));
+
+            batch.remainingQuestCount = sortedQuests.length;
 
             quests: for (const queuedQuest of sortedQuests) {
                 const questId = queuedQuest.id;
