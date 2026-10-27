@@ -477,7 +477,7 @@ export default definePlugin({
             ]
         },
         {
-            find: 'STEP_2_CLICKED_INTERNAL,"quest_embed_card_footer',
+            find: ".GameProfileSources.QuestEmbed,",
             group: true,
             predicate: () => !getQuestifySettings().disableQuestsEverything,
             replacement: [
